@@ -1,0 +1,262 @@
+#!/usr/bin/env bash
+# naver_upload.sh — final.md → 네이버 블로그 "임시저장"까지만 (발행은 사람).
+# 사용: naver_upload.sh <posts/NNN-slug/final.md> [--blog-id <blogId>(없으면 작업 폴더 .env 의 NAVER_BLOG_ID — 둘 다 없으면 exit 2)] [--category "이름"(frontmatter에 category가 없을 때의 대체값)] [--dry-run]
+# 작업 폴더(cwd)에서 실행한다 (세션 파일 playwright-state/storage_state.json 이 cwd 기준).
+# 동작: lint --stage upload → 이중 검사 → 세션·계정 확인 → create-draft-from-folder (표지 images/00-cover.png 를 대표이미지로) → list-drafts 확인.
+# 종료 코드: 0 성공 | 2 사용 오류 | 10 lint 실패 | 11 이중 검사 실패 | 12 이미지 문제(표지 없음·절대경로 아님·파일 없음)
+#            20 세션 없음/만료 | 21 로그인 계정이 --blog-id 블로그에 글을 쓸 수 없음(다른 계정 세션)
+#            30 create-draft-from-folder 실패 | 31 list-drafts에서 제목 확인 불가
+# naver-blog-cli 는 실패해도 exit 0 이므로 종료 코드가 아니라 stdout 문구로 판정한다.
+set -u
+export NAVER_BLOG_READONLY=1   # 발행·삭제 서브커맨드를 CLI에서 제거 — 임시저장까지만
+export PYTHONUTF8=1            # Windows(cp949)에서도 python 입출력·파일을 UTF-8로
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BLOG_ID=""
+CATEGORY_OPT=""
+DRY=0
+FINAL=""
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --blog-id) [ $# -ge 2 ] || { echo "오류: $1 값이 필요합니다." >&2; exit 2; }; BLOG_ID="$2"; shift 2 ;;
+    --category) [ $# -ge 2 ] || { echo "오류: $1 값이 필요합니다." >&2; exit 2; }; CATEGORY_OPT="$2"; shift 2 ;;
+    --dry-run) DRY=1; shift ;;
+    -h|--help) sed -n '2,9p' "$0"; exit 0 ;;
+    -*) echo "오류: 알 수 없는 옵션: $1" >&2; exit 2 ;;
+    *) FINAL="$1"; shift ;;
+  esac
+done
+if [ -z "$FINAL" ] || [ ! -f "$FINAL" ]; then
+  echo "오류: final.md 경로가 없거나 파일이 없습니다. 사용: naver_upload.sh posts/NNN-slug/final.md [--blog-id ID] [--category 이름] [--dry-run]" >&2
+  exit 2
+fi
+if [ -z "$BLOG_ID" ] && [ -f .env ]; then   # --blog-id 가 없으면 작업 폴더(cwd) .env 의 NAVER_BLOG_ID (파싱은 gen_image 와 같게)
+  BLOG_ID="$(python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); from gen_image import read_env_values; print(read_env_values(".env", ("NAVER_BLOG_ID",)).get("NAVER_BLOG_ID", ""))' "$HERE" 2>/dev/null)"
+  BLOG_ID="${BLOG_ID//$'\r'/}"
+fi
+if [ -z "$BLOG_ID" ]; then echo "오류: 블로그 ID가 없습니다 — --blog-id <블로그 아이디>를 주거나 작업 폴더 .env 에 NAVER_BLOG_ID=<블로그 아이디>를 넣으세요." >&2; exit 2; fi
+
+POSTDIR="$(cd "$(dirname "$FINAL")" && pwd)"
+LOG="$POSTDIR/upload.log"
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/naver-upload.XXXXXX")" || { echo "오류: 임시 폴더를 만들 수 없습니다." >&2; exit 2; }
+trap 'rm -rf "$WORK"' EXIT
+
+# Windows(Git Bash)에서 네이티브 프로그램에 넘길 경로는 C:/... 꼴로 (cygpath 없으면 그대로)
+winpath() { if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s' "$1"; fi; }
+nocr() { printf '%s' "${1//$'\r'/}"; }   # Windows 프로그램 출력의 CR 제거
+
+log() { printf '%s | %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" >> "$LOG"; }
+die() { code="$1"; shift; echo "$*" >&2; log "exit $code | $(printf '%s' "$*" | head -n1)"; exit "$code"; }
+
+# 프론트매터·본문 처리 헬퍼 (lint_post.py 의 parse_frontmatter 재사용)
+PYH='
+import os, re, sys, json
+sys.path.insert(0, sys.argv[1])
+import lint_post
+final, mode, out = sys.argv[2], sys.argv[3], sys.argv[4]
+text = open(final, encoding="utf-8").read()
+lines = text.splitlines()
+fm, start, err = lint_post.parse_frontmatter(lines)
+if mode == "precheck":
+    kdir = lint_post.find_knowledge(final)
+    bad = []
+    for w in lint_post.load_forbidden(kdir):
+        if w in text: bad.append("금칙어: " + w)
+    if "[[" in text: bad.append("자리표시 [[ 잔존")
+    if re.search(r"!\[[^\]]*\]\(\s*\)", text): bad.append("빈 이미지 경로 ![..]()")
+    if re.search(r"\[출처 필요\]|\(출처 필요\)", text): bad.append("[출처 필요] 잔존")
+    if re.search(r"\[출처\]\(", text): bad.append("[출처]( 링크형 출처 잔존 — scripts/build_final.py 재실행")
+    if re.search(r"출처\s*:", text): bad.append("출처: 잔존 — scripts/build_final.py 재실행")
+    if re.search(r"!\[[^\]]+\]\(", text): bad.append("alt(캡션) 있는 이미지 — scripts/build_final.py 재실행")
+    if not re.search(r"^:::place\s+\S.*:::\s*$", text, re.M): bad.append(":::place 지시문 없음 — scripts/build_final.py 재실행")
+    if not re.search(r"^\*\*#", text, re.M): bad.append("**# 해시태그 줄 없음 — scripts/build_final.py 재실행")
+    print("\n".join(bad)); sys.exit(11 if bad else 0)
+if err or fm is None:
+    print("frontmatter 오류: " + str(err)); sys.exit(2)
+body = lines[start:]
+while body and not body[0].strip(): body.pop(0)
+while body and re.match(r"^\s*<!--.*?-->\s*$", body[0]):   # 제목 B안/A안 주석
+    body.pop(0)
+    while body and not body[0].strip(): body.pop(0)
+fence = False
+for i, l in enumerate(body):          # 첫 ## 앞, 코드펜스 밖의 H1 한 줄 제거
+    if re.match(r"^\s*(```|~~~)", l):
+        fence = not fence
+    elif not fence:
+        if re.match(r"^##\s", l):
+            break
+        if re.match(r"^#\s+\S", l):
+            del body[i]; break
+btxt = "\n".join(body).strip() + "\n"
+imgs = [re.sub(r"\s+\"[^\"]*\"\s*$", "", m).strip() for m in re.findall(r"!\[[^\]]*\]\(([^)]*)\)", btxt)]
+tags = fm.get("tags") or []
+if isinstance(tags, str): tags = [t.strip() for t in tags.strip("[]").split(",") if t.strip()]
+tags = [re.sub(r"\s+", "", t.lstrip("#")) for t in tags]
+tags = [t for t in tags if t]
+kdir = lint_post.find_knowledge(final)
+meta = {"title": fm.get("title", ""), "category": fm.get("category", ""), "tags": ",".join(tags),
+        "business": lint_post.profile_row(kdir, "업체명"), "place_query": lint_post.profile_row(kdir, "장소 검색어"),
+        "keyword": fm.get("keyword", ""), "variation": fm.get("variation", ""),
+        "place": next((l.strip() for l in lines if re.match(r"^:::place\s", l)), ""),
+        "images": len(imgs), "lines": len(btxt.splitlines()),
+        "bad_images": [p for p in imgs if not os.path.isabs(p)],
+        "missing_images": [p for p in imgs if os.path.isabs(p) and not os.path.isfile(p)]}
+open(out + ".md", "w", encoding="utf-8", newline="\n").write(btxt)
+json.dump(meta, open(out + ".json", "w", encoding="utf-8"), ensure_ascii=False)
+'
+JGET='import json,sys; v=json.load(open(sys.argv[1], encoding="utf-8"))[sys.argv[2]]; print("\n".join(v) if isinstance(v,list) else v)'
+meta() { local v; v="$(python3 -c "$JGET" "$WORK/upload-meta.json" "$1")"; nocr "$v"; }
+
+log "시작 | $FINAL | blog-id=$BLOG_ID | dry-run=$DRY"
+
+# 0) 표지 (대표이미지) — create-draft-from-folder 가 images/00-cover.* 를 본문 맨 앞에 넣고 대표로 지정한다
+COVER="$POSTDIR/images/00-cover.png"
+[ -f "$COVER" ] || die 12 "표지 images/00-cover.png 없음 — 이미지 단계(make_cover.py) 재실행"
+
+# 1) lint (+ 이중 안전장치)
+LINT_OUT="$(python3 "$HERE/lint_post.py" "$FINAL" --stage upload --json --blog-id "$BLOG_ID" 2>"$WORK/lint.err")"; LINT_RC=$?   # 관련글 링크도 업로드할 블로그 기준
+if [ "$LINT_RC" -ne 0 ]; then
+  FAILS="$(printf '%s' "$LINT_OUT" | python3 -c '
+import json,sys
+try:
+    d=json.load(sys.stdin)
+    for c in d["checks"]:
+        if c["result"]=="FAIL": print("  - %s: %s %s" % (c["id"], c["rule"], c["detail"]))
+except Exception:
+    print("  - lint 출력을 해석하지 못했습니다")
+    sys.exit(1)')" || FAILS="$FAILS
+$(sed 's/^/  | /' "$WORK/lint.err")"
+  FAILS="$(nocr "$FAILS")"
+  die 10 "lint_post.py 실패 — 업로드를 시작하지 않습니다.
+$FAILS"
+fi
+PRE="$(python3 -c "$PYH" "$HERE" "$FINAL" precheck "$WORK/upload-meta")"; PRE_RC=$?; PRE="$(nocr "$PRE")"
+if [ "$PRE_RC" -ne 0 ]; then
+  die 11 "이중 검사 실패 — 업로드를 시작하지 않습니다.
+$(printf '%s\n' "$PRE" | sed 's/^/  - /')"
+fi
+
+# 3~4) frontmatter·본문
+HELP_RC=0; python3 -c "$PYH" "$HERE" "$FINAL" body "$WORK/upload-meta" || HELP_RC=$?
+[ "$HELP_RC" -eq 0 ] || die 2 "frontmatter 를 읽지 못했습니다."
+TITLE="$(meta title)"; TAGS="$(meta tags)"; CATEGORY="$(meta category)"
+NIMG="$(meta images)"; NLINES="$(meta lines)"; PLACE="$(meta place)"; BIZ="$(meta business)"; PQ="$(meta place_query)"
+[ -n "$CATEGORY_OPT" ] && [ -z "$CATEGORY" ] && CATEGORY="$CATEGORY_OPT"
+[ -n "$CATEGORY" ] || die 2 "카테고리가 없습니다 — final.md frontmatter 에 category 를 넣거나 --category 이름 을 주세요."
+[ -n "$TITLE" ] || die 2 "frontmatter 에 title 이 없습니다."
+BAD="$(meta bad_images)"; MISS="$(meta missing_images)"
+if [ -n "$BAD" ]; then
+  die 12 "이미지 경로가 절대경로가 아닙니다 (scripts/build_final.py 재실행):
+$(printf '%s\n' "$BAD" | sed 's/^/  - /')"
+fi
+if [ -n "$MISS" ]; then
+  die 12 "이미지 파일이 존재하지 않습니다:
+$(printf '%s\n' "$MISS" | sed 's/^/  - /')"
+fi
+BODY="$WORK/body.md"; mv "$WORK/upload-meta.md" "$BODY"
+mkdir -p "$WORK/images" && cp "$COVER" "$WORK/images/00-cover.png"
+
+# 5) dry-run
+if [ "$DRY" -eq 1 ]; then
+  echo "[dry-run] 세션 확인 생략(dry-run)"
+  echo "[dry-run] title: $TITLE"
+  echo "[dry-run] category: $CATEGORY"
+  echo "[dry-run] tags: $TAGS"
+  echo "[dry-run] 본문 줄 수: $NLINES, 이미지 수: $NIMG"
+  echo "[dry-run] 표지: $COVER"
+  echo "[dry-run] 장소 지시문: $PLACE"
+  log "dry-run 완료 | title=$TITLE | category=$CATEGORY | tags=$TAGS | 이미지=$NIMG"
+  exit 0
+fi
+
+# 2) 세션 확인 (종료 코드 아닌 stdout 문구로 판정; dry-run 은 위에서 이미 종료)
+# 직접 로그인 안내: Windows(Git Bash)는 PowerShell 명령(작업 폴더를 실제 Windows 경로로), 그 밖은 bash 명령
+case "$(uname -s 2>/dev/null)" in
+  MINGW*|MSYS*) WD="$(cygpath -w "$PWD" 2>/dev/null)" || WD="$PWD"; [ -n "$WD" ] || WD="$PWD"
+    LOGIN_CMD="PowerShell에서: cd \"$WD\"; \$env:NAVER_STATE = \"\$PWD\\playwright-state\\storage_state.json\"; & \"\$(uv tool dir)\\naver-blog-cli\\Scripts\\python.exe\" \"\$HOME\\naver-blog-cli\\login_setup.py\"" ;;
+  *) LOGIN_CMD="NAVER_STATE=\"\$PWD/playwright-state/storage_state.json\" \"\$(uv tool dir)/naver-blog-cli/bin/python\" ~/naver-blog-cli/login_setup.py" ;;
+esac
+if ! command -v naver-blog-cli >/dev/null 2>&1; then
+  die 20 "naver-blog-cli 를 찾을 수 없습니다. /naver-blog-autopilot:blog-setup 으로 설치를 확인하세요."
+fi
+SESS="$(NAVER_BLOG_ID="$BLOG_ID" naver-blog-cli check-session 2>&1)"; SESS="$(nocr "$SESS")"
+case "$SESS" in
+  "세션 정상"*"글쓰기 가능"*) ;;
+  *) die 20 "네이버 세션을 사용할 수 없습니다: $(printf '%s' "$SESS" | head -n1)
+작업 폴더에서 터미널로 직접 로그인하세요 (\"로그인 상태 유지\" 체크):
+  $LOGIN_CMD" ;;
+esac
+
+# 2b) 계정 확인 — check-session 은 다른 계정 세션이어도 "글쓰기 가능"으로 통과한다(글쓰기 화면이 그 계정
+#     블로그 홈으로 리다이렉트돼도 #mainFrame 이 붙으므로). naver-blog-cli 의 python 으로 글쓰기 화면 URL 의
+#     블로그 주인을 본다. 글은 쓰지 않는다.
+LOGIN_HINT="작업 폴더에서 터미널로 ${BLOG_ID} 블로그 계정으로 직접 로그인하세요 (\"로그인 상태 유지\" 체크):
+  $LOGIN_CMD"
+# naver-blog-cli 도구 python: macOS·Linux 는 bin/python, Windows 는 Scripts/python.exe
+UVT="$(uv tool dir 2>/dev/null)"; command -v cygpath >/dev/null 2>&1 && [ -n "$UVT" ] && UVT="$(cygpath -u "$UVT")"
+CLI_PY=""; for c in "$UVT/naver-blog-cli/bin/python" "$UVT/naver-blog-cli/Scripts/python.exe"; do [ -x "$c" ] && { CLI_PY="$c"; break; }; done
+if ! command -v uv >/dev/null 2>&1 || [ -z "$CLI_PY" ]; then
+  die 20 "계정 확인용 python($UVT/naver-blog-cli/bin/python 또는 Scripts/python.exe)을 찾을 수 없습니다 — naver-blog-cli 를 uv tool 로 설치했는지 /naver-blog-autopilot:blog-setup 으로 확인하세요."
+fi
+ACCT="$("$CLI_PY" "$(winpath "$HERE/check_blog_account.py")" "$BLOG_ID" 2>&1)"; ACCT_RC=$?; ACCT="$(nocr "$ACCT")"
+case "$ACCT_RC" in
+  0) log "계정 확인 | $(printf '%s' "$ACCT" | tail -n1)" ;;
+  21) die 21 "로그인한 계정이 ${BLOG_ID} 블로그에 글을 쓸 수 없음 — 그 블로그 계정으로 login_setup.py 다시 실행
+  확인 결과: $(printf '%s' "$ACCT" | tail -n1)
+$LOGIN_HINT" ;;
+  *) die 20 "계정 확인 실패(exit $ACCT_RC): $(printf '%s' "$ACCT" | tail -n1)
+$LOGIN_HINT" ;;
+esac
+
+# 6) 임시저장 (create-draft-from-folder: 표지를 본문 맨 앞에 넣고 대표 지정)
+CREATE="$(NAVER_BLOG_ID="$BLOG_ID" naver-blog-cli create-draft-from-folder "$(winpath "$WORK")" --markdown-file body.md --title="$TITLE" --category="$CATEGORY" --tags="$TAGS" 2>&1)"
+CREATE="$(nocr "$CREATE")"
+case "$CREATE" in
+  *"넣기 전에 걸린 것"*|*"작성 실패"*|*"임시저장이 안 된 것 같습니다"*|*"못 찾음"*) CREATE_BAD=1 ;;
+  *"임시저장 완료"*) CREATE_BAD=0 ;;
+  *) CREATE_BAD=1 ;;
+esac
+case "$CREATE_BAD" in
+  0) ;;
+  *) die 30 "임시저장에 실패했습니다 (naver-blog-cli 출력):
+$(printf '%s\n' "$CREATE" | tail -n 5 | sed 's/^/  | /')
+references/naver-blog-cli.md 의 실패 유형(넣기 전에 걸린 것·에디터 변경·이미지 10MB·세션 만료)을 확인하세요." ;;
+esac
+WARN=""
+case "$CREATE" in
+  *"설정 실패"*) WARN="경고: 카테고리/태그 설정 실패 — 네이버 임시저장 글에서 직접 확인"
+                 echo "$WARN" >&2
+                 log "경고 | 설정 실패 포함: $(printf '%s' "$CREATE" | grep '설정 실패' | head -n1)" ;;
+esac
+if [[ "$CREATE" == *"대표 지정 실패"* || "$CREATE" == *"표지 넣기 실패"* ]]; then
+  echo "경고: 대표이미지 지정 실패 — 임시저장 글에서 첫 이미지를 대표로 직접 지정" >&2
+  log "경고 | 대표이미지 지정 실패: $(printf '%s' "$CREATE" | grep -E '대표 지정 실패|표지 넣기 실패' | head -n1)"
+elif ! { [[ "$CREATE" == *"0:표지"* ]] && [[ "$CREATE" =~ (^|[^[:alnum:]])대표\ 지정($|[^[:alnum:]]) ]]; }; then
+  echo "경고: 대표이미지 지정 확인 불가 — 임시저장 글에서 확인" >&2
+  log "경고 | 대표이미지 지정 확인 불가 (0:표지 또는 대표 지정 노트 없음)"
+fi
+PLACE_PICKED="$(printf '%s\n' "$CREATE" | python3 -c 'import re,sys; m=re.search(r"\d+:장소\((.*?)\)(?:, |\])", sys.stdin.buffer.read().decode("utf-8", "replace")); sys.stdout.write(m.group(1) if m else "")')"
+if [ -z "$PLACE_PICKED" ]; then
+  echo "경고: 장소 카드 확인 필요 — 장소(…) 노트 없음 또는 빈 값" >&2
+  log "경고 | 장소 카드 확인 필요: 장소 노트 없음/빈 값"
+elif ! { [ -n "$BIZ" ] && [[ "$PLACE_PICKED" == *"$BIZ"* ]]; } && ! { [ -n "$PQ" ] && [[ "$PLACE_PICKED" == *"$PQ"* ]]; }; then   # business-profile.md 업체명·장소 검색어 중 하나라도 장소 이름에 있으면 통과
+  echo "경고: 장소 카드 확인 필요 — $PLACE_PICKED" >&2
+  log "경고 | 장소 카드 확인 필요: $PLACE_PICKED"
+fi
+
+# 7) 확인
+DRAFTS="$(NAVER_BLOG_ID="$BLOG_ID" naver-blog-cli list-drafts 2>&1)"; DRAFTS="$(nocr "$DRAFTS")"
+HIT="$(printf '%s\n' "$DRAFTS" | grep -F -- "$TITLE" | head -n1)"
+if [ -z "$HIT" ]; then
+  die 31 "임시저장 목록에서 제목을 확인하지 못했습니다. 저장은 됐을 수 있으니 네이버에서 직접 확인하세요 (글쓰기 → 임시저장 글)."
+fi
+
+# 8) 성공
+log "성공 | title=$TITLE | category=$CATEGORY | tags=$TAGS | 이미지=$NIMG | 장소=${PLACE_PICKED:-} | variation=$(meta variation) | list-drafts: $HIT"
+echo "임시저장 완료 — 네이버 앱/웹 → 글쓰기 → 임시저장 글 → 미리보기 → 발행"
+echo "  제목: $TITLE"
+echo "  카테고리: $CATEGORY / 태그: $TAGS / 이미지: ${NIMG}장"
+[ -n "$PLACE_PICKED" ] && echo "  장소: $PLACE_PICKED"
+[ -n "$WARN" ] && echo "$WARN"
+exit 0

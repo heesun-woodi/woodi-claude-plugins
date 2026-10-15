@@ -1,0 +1,9 @@
+{
+  "name": "cro-hypothesis-grooming",
+  "description": "백로그에 등록된 가설 1건을 입력받아 근거를 채워 ICE 점수를 올리는 가설 그루밍 CRO 코칭 플러그인입니다. 그루밍 수행 모드는 이관(솔루션 형태를 Variant 후보로 분리) → Problem Validation(V1~V5: 트래픽·퍼널 병목·벤치마크 Gap·정성 심각도·기회 손실) → Uplift 시뮬레이션 직접 계산(Step A~H, 보수/기본/낙관 3시나리오, 최종 KPI 증분 금액) → Target 확정(벤치마크/MDE 근사/내부 Gap 3법) → 대안 솔루션·Rationale 7유형 → ICE 재산정 제안 → 팀 문서(실험설계서) 갱신 블록 착지 순서로 진행합니다. 세션 시작 시 그루밍 수행 / UT 설계서 작성(인터뷰 타겟 선정 → 스크립트 초안 → transcript 분석) / 코치용 리뷰(19항목 체크리스트, Critical/Recommended/Optional 판정 + A~D 등급) 세 모드 중 고릅니다. 정량 근거는 Amplitude MCP 실쿼리를 허용하되 골트리 정본값을 우선하고, ICE는 합산식(최대 30)만 허용합니다. Uplift는 두 구간 모두 최종 KPI(계약) 금액까지 계산하며, Variant 후보 2개 이상과 대조군·실험군 시안 확보를 완료 조건으로 둡니다. 샘플사이즈·MDE 정밀 계산·실험 설계서 작성은 실험 설계 소관, 새 가설 작성은 cro-hypothesis-backlog, 문제정의 재진단은 cro-problem-definition으로 라우팅합니다.",
+  "version": "1.0.0",
+  "author": {
+    "name": "heesun-woodi"
+  },
+  "license": "CC-BY-NC-4.0"
+}

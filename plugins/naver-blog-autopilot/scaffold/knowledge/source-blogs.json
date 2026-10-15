@@ -1,0 +1,42 @@
+{
+  "topic_sources": [
+    {
+      "blogId": "[주제 소스 블로그 ID]",
+      "name": "[블로그 이름]",
+      "categories": [
+        "[참고할 카테고리]"
+      ],
+      "note": "[발행 빈도·우선순위 메모]"
+    }
+  ],
+  "style_references": [
+    {
+      "blogId": "[제목 패턴 참고 블로그 ID]",
+      "name": "[블로그 이름]",
+      "note": "[참고할 점(예: 지역명 제목 패턴)]"
+    }
+  ],
+  "own_blog": {
+    "blogId": "[자기 블로그 ID — .env의 NAVER_BLOG_ID와 같게]",
+    "name": "[자기 블로그 이름]",
+    "categories": {
+      "info": "[정보성 글 카테고리]",
+      "sales": "[홍보·판매 글 카테고리]"
+    }
+  },
+  "design_references": [
+    {
+      "blogId": "[자기 블로그 ID]",
+      "logNo": "[기준 글 logNo]",
+      "url": "m.blog.naver.com/[자기 블로그 ID]/[기준 글 logNo]",
+      "role": "own-style",
+      "why": "[담당자 메모: 이 글의 구조·모습을 따른다 — 예: 목차·번호 소제목·표·이모지 목록·FAQ·업체소개 이미지·지도·해시태그]"
+    },
+    {
+      "blogId": "[레퍼런스 블로그 ID]",
+      "logNo": "[logNo]",
+      "url": "m.blog.naver.com/[레퍼런스 블로그 ID]/[logNo]",
+      "why": "[담당자 메모: 무엇이 좋은가]"
+    }
+  ]
+}
