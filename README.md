@@ -32,7 +32,7 @@ Claude Code에서:
 | 플러그인 | 하는 일 |
 |---|---|
 | `ecommerce-growth-discovery` | GA4·Meta 광고 MCP로 자기 몰의 baseline·전환율·채널 효율을 탐색하고, 상품·랜딩 화면 문제를 정리해 PSR 가설과 ICE까지 만들기 (이커머스판 시작점) |
-| `naver-blog-autopilot` | 네이버 정보성 블로그 글을 주제 리서치 → 초안 → 공신 출처 팩트체크 → SEO → 이미지·표지 → 임시저장까지 자동화. 업종 무관 — 업체 정보·금칙어·공신 출처는 `blog-setup`이 만드는 템플릿에 직접 채웁니다. 발행은 사람이 직접 합니다 |
+| `naver-blog-autopilot` | 네이버 정보성 블로그 글을 주제 리서치 → 초안 → 공신 출처 팩트체크 → SEO → 이미지·표지 → 임시저장까지 자동화. 설치 후 `/naver-blog-autopilot:blog-onboard`가 대화로 블로그에 맞춰 줍니다 — 업체·전문가·개인 블로거·브랜드, 이미지는 AI 생성(Gemini/OpenAI)·무료 스톡(Pexels)·실사진 중 선택. 발행은 사람이 직접 합니다. 처음 쓰는 분은 [퀵스타트](docs/guides/naver-blog-autopilot-quickstart.md)부터 보세요 |
 
 ## 필요한 것
 
@@ -40,7 +40,7 @@ Claude Code에서:
   `claude mcp add --transport http amplitude https://mcp.amplitude.com/mcp` 후 OAuth 로그인 (EU 프로젝트는 `https://mcp.eu.amplitude.com/mcp`)
 - (선택) AI 시안 초안 — Gemini 또는 OpenAI API 키. 없어도 나머지 기능은 모두 동작합니다.
 - `ecommerce-growth-discovery` — uv, gcloud와 ADC(`analytics.readonly`), 조회할 GA4 속성의 뷰 권한. Meta 광고 연결은 선택입니다. 자세한 세팅은 플러그인 README를 보세요.
-- `naver-blog-autopilot` — uv·Python 3.11+, Playwright Chromium, 외부 도구 [naver-blog-cli](https://github.com/spegas/naver-blog-cli)(MIT · 이 저장소에 포함하지 않음 · 별도 설치), 이미지 생성 API 키 1개(Gemini 또는 OpenAI). 자세한 세팅은 플러그인 README를 보세요.
+- `naver-blog-autopilot` — uv·Python 3.11+, Playwright Chromium, 외부 도구 [naver-blog-cli](https://github.com/spegas/naver-blog-cli)(MIT · 이 저장소에 포함하지 않음 · 별도 설치), 이미지 소스: AI 생성 키(Gemini 또는 OpenAI)·무료 스톡(Pexels)·실사진 중 선택. 자세한 세팅은 플러그인 README를 보세요.
 
 ## 동봉 데이터는 샘플입니다
 

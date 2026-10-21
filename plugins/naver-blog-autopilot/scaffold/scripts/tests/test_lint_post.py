@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -13,6 +14,8 @@ import lint_post  # noqa: E402
 
 DESIGN = "# 디자인 시스템\n\n<!-- lint: min_chars=900 max_chars=6000 min_h2=3 max_h2=5 min_images=2 min_sources=1 tags_min=3 tags_max=6 -->\n"
 PROFILE = "# 업체\n\n| 항목 | 내용 |\n|---|---|\n| 고객 지역 | 가나동, 다라동 (고객 많은 순) |\n\n## 금칙어\n\n- `금지어예시` — 변형 `금지어 예시`, `금지어예시 표현`도 금지\n- `무관한단어`\n\n## 다음 절\n\n- `섹션밖단어`\n"
+PROFILE_NO_CLOSING = PROFILE  # 1.0.0 프로필(`마무리 블록` 행 없음)
+PROFILE = PROFILE.replace("| 고객 지역 | 가나동, 다라동 (고객 많은 순) |\n", "| 고객 지역 | 가나동, 다라동 (고객 많은 순) |\n| 마무리 블록 | 문의헤딩, 소개이미지, 장소카드, 해시태그 |\n")
 ENV = "NAVER_BLOG_ID=example_blog\n"  # 작업 폴더 .env(knowledge/의 상위) — final·upload의 related_links 기준 블로그
 
 
@@ -62,6 +65,7 @@ class LintPostTest(unittest.TestCase):
 
     def write(self, name, text):
         p = os.path.join(self.root, name)
+        os.makedirs(os.path.dirname(p), exist_ok=True)
         with open(p, "w", encoding="utf-8") as f:
             f.write(text)
         return p
@@ -235,7 +239,11 @@ class LintPostTest(unittest.TestCase):
 
     def test_unique_related_links(self):
         t = self.good.replace("example_blog/2", "example_blog/1")
-        self.assertEqual(self.failed(self.run_lint(t)), ["related_links"])
+        posts = self.write(os.path.join("work", "own-posts.json"), json.dumps([{"title": str(i)} for i in range(3)]))
+        try:  # 자기 글이 충분하면(own-posts 3편) 서로 다른 링크 2개가 필요하다
+            self.assertEqual(self.failed(self.run_lint(t)), ["related_links"])
+        finally:
+            os.remove(posts)
 
     def test_decode_error_exit_2(self):
         p = os.path.join(self.root, "bin.md")
@@ -405,7 +413,7 @@ class LintPostTest(unittest.TestCase):
         no_tags = self.upload_text().replace("**#선물포장 #다라동선물포장**\n", "")
         res = self.run_upload(no_tags)
         self.assertEqual(self.failed(res), ["closing_block"])
-        self.assertIn("**# 해시태그", self.by_id(res)["closing_block"]["value"])
+        self.assertIn("해시태그", self.by_id(res)["closing_block"]["value"])
 
     def test_upload_h2_spacing_pass_shape(self):
         t = self.upload_text()
@@ -648,6 +656,249 @@ class LintPostTest(unittest.TestCase):
         self.assertIn("UTF-8로 읽을 수 없어 learned_avoid", r.stderr)
         c = next(x for x in json.loads(r.stdout)["checks"] if x["id"] == "learned_avoid")
         self.assertEqual(c["result"], "SKIP")
+
+
+FIXTURES = os.path.join(HERE, "fixtures")
+
+
+def v11_profile(regions="가나동, 다라동", tone="합니다체", blocks="문의헤딩, 소개이미지, 장소카드, 해시태그", sources="ai, photo"):
+    """PROFILE(금칙어 절 포함) 위에 v1.1 행을 얹은 프로필."""
+    rows = f"| 고객 지역 | {regions} |\n| 톤 | {tone} |\n| 마무리 블록 | {blocks} |\n| 이미지 소스 | {sources} |\n"
+    return PROFILE_NO_CLOSING.replace("| 고객 지역 | 가나동, 다라동 (고객 많은 순) |\n", rows)
+
+
+class LintProfileV11Test(unittest.TestCase):
+    """프로필 v1.1: 톤 두 갈래 · 마무리 블록 부분집합 · title_region SKIP · own-posts 기준 related_links."""
+    # LintPostTest의 글 조립 도구를 그대로 쓴다(테스트 자체는 상속하지 않아 다시 돌지 않는다)
+    run_lint, failed, by_id = (LintPostTest.run_lint, LintPostTest.failed, LintPostTest.by_id)
+    upload_text, run_upload = LintPostTest.upload_text, LintPostTest.run_upload
+
+    @classmethod
+    def setUpClass(cls):
+        LintPostTest.setUpClass.__func__(cls)
+        cls.kd = os.path.join(cls.root, "knowledge")
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._tmp.cleanup()
+
+    def write(self, name, text):
+        os.makedirs(os.path.dirname(os.path.join(self.root, name)), exist_ok=True)
+        return LintPostTest.write(self, name, text)
+
+    def set_profile(self, text):
+        with open(os.path.join(self.kd, "business-profile.md"), "w", encoding="utf-8") as f:
+            f.write(text)
+
+    def set_own_posts(self, n):
+        os.makedirs(os.path.join(self.root, "work"), exist_ok=True)
+        with open(os.path.join(self.root, "work", "own-posts.json"), "w", encoding="utf-8") as f:
+            json.dump([{"title": f"글 {i}", "date": "2025-01-01"} for i in range(n)], f)
+
+    def tearDown(self):
+        shutil.rmtree(os.path.join(self.root, "work"), ignore_errors=True)
+        self.set_profile(PROFILE)
+
+    # ---- 헬퍼 ----
+    def test_load_closing_blocks_orders_and_validates(self):
+        self.set_profile(v11_profile(blocks="해시태그, 장소카드, 문의헤딩"))
+        self.assertEqual(lint_post.load_closing_blocks(self.kd), ["문의헤딩", "장소카드", "해시태그"])
+        self.assertEqual(lint_post.CLOSING_ORDER, ("문의헤딩", "소개이미지", "장소카드", "해시태그"))
+        for bad, msg in (("문의헤딩, 소개이미지", "해시태그 없음"), ("해시태그, 푸터", "푸터")):
+            self.set_profile(v11_profile(blocks=bad))
+            with self.assertRaisesRegex(ValueError, "마무리 블록 값이 올바르지 않습니다: " + msg):
+                lint_post.load_closing_blocks(self.kd)
+        self.set_profile(PROFILE_NO_CLOSING)  # 행 없음
+        with self.assertRaisesRegex(ValueError, "마무리 블록"):
+            lint_post.load_closing_blocks(self.kd)
+
+    def test_load_tone_and_image_sources(self):
+        self.set_profile(v11_profile(tone="해요체", sources="photo, ai, photo"))
+        self.assertEqual(lint_post.load_tone(self.kd), "casual")
+        self.assertEqual(lint_post.load_image_sources(self.kd), ["photo", "ai"])
+        self.set_profile(v11_profile(tone="합니다체"))
+        self.assertEqual(lint_post.load_tone(self.kd), "formal")
+        self.set_profile(v11_profile(tone="반말", sources="ai, video"))
+        with self.assertRaises(ValueError):
+            lint_post.load_tone(self.kd)
+        with self.assertRaises(ValueError):
+            lint_post.load_image_sources(self.kd)
+        self.set_profile(PROFILE)
+        for fn in (lint_post.load_tone, lint_post.load_image_sources):
+            with self.assertRaises(ValueError):
+                fn(self.kd)
+
+    def test_own_posts_count(self):
+        self.set_own_posts(3)
+        path = os.path.join(self.root, "work", "own-posts.json")
+        self.assertEqual(lint_post.own_posts_count(path), 3)
+        self.assertIsNone(lint_post.own_posts_count(os.path.join(self.root, "work", "nope.json")))
+        bad = self.write(os.path.join("work", "broken.json"), "{not json")
+        self.assertIsNone(lint_post.own_posts_count(bad))
+
+    # ---- tone ----
+    def test_casual_tone_warns_but_keeps_pass(self):
+        self.set_profile(v11_profile(tone="해요체"))
+        res = self.run_lint(self.good + "\n안전이 먼저예요. 그렇게 하면 되죠. 준비물은 가위입니다. 순서가 됩니다. 확인했습니다.\n"
+                            "문의는 언제든 환영합니다.\n")
+        by = self.by_id(res)
+        self.assertEqual(self.failed(res), [])
+        self.assertTrue(res["pass"])
+        self.assertEqual((by["tone"]["result"], by["tone"]["value"]), ("WARN", 4))  # 합니다체 종결 문장 수
+        self.assertEqual(by["tone"]["rule"], "합니다체 종결 0건 권장(해요체 프로필 — WARN만)")
+        self.assertIn("예: ", by["tone"]["detail"])
+        self.assertIn("(WARN: tone)", lint_post.render_table(res))
+
+    def test_casual_tone_passes_without_formal_endings(self):
+        self.set_profile(v11_profile(tone="해요체"))
+        res = self.run_lint(self.good + "\n안전이 먼저예요. 그렇게 하면 되죠.\n")
+        self.assertEqual(self.by_id(res)["tone"]["result"], "PASS")
+        self.assertTrue(res["pass"])
+
+    def test_formal_profile_and_missing_tone_keep_haeyo_fail(self):
+        for prof in (v11_profile(tone="합니다체"), PROFILE):
+            self.set_profile(prof)
+            self.assertEqual(self.failed(self.run_lint(self.good + "\n안전이 먼저예요.\n")), ["tone"])
+
+    def test_invalid_tone_value_exits_2(self):
+        self.set_profile(v11_profile(tone="반말"))
+        r = subprocess.run([sys.executable, SCRIPT, self.write("t.md", self.good), "--stage", "final"],
+                           capture_output=True, text=True)
+        self.assertEqual(r.returncode, 2)
+        self.assertIn("톤 값이 올바르지 않습니다", r.stderr)
+
+    # ---- closing_block (upload) ----
+    def closing_result(self, text, blocks):
+        self.set_profile(v11_profile(blocks=blocks))
+        res = self.run_upload(text)
+        return self.failed(res), self.by_id(res)["closing_block"]
+
+    def test_closing_block_four_combinations(self):
+        full = self.upload_text()
+        no_intro = full.replace(f"![]({self.intro_img})\n", "")
+        no_place = no_intro.replace(":::place 예시상회:::\n", "")
+        only_tags = no_place.replace("## 📞 문의 안내: 000-0000-0000\n", "")
+        # 1) 전부
+        failed, cb = self.closing_result(full, "문의헤딩, 소개이미지, 장소카드, 해시태그")
+        self.assertEqual((failed, cb["result"]), ([], "PASS"))
+        self.assertEqual(cb["rule"], "문의 헤딩 → 소개 이미지 → 장소 카드 → 해시태그")
+        # 2) 문의헤딩 + 해시태그 (적은 순서와 무관)
+        failed, cb = self.closing_result(no_place, "해시태그, 문의헤딩")
+        self.assertEqual((failed, cb["rule"]), ([], "문의 헤딩 → 해시태그"))
+        failed, cb = self.closing_result(no_place, "문의헤딩, 소개이미지, 장소카드, 해시태그")  # 같은 글이 전부 요구에는 FAIL
+        self.assertEqual(failed, ["closing_block"])
+        self.assertEqual(cb["value"], "누락/순서 오류: 소개 이미지, 장소 카드")
+        # 3) 해시태그만 — 문의 헤딩이 없어도 마지막 h2 제약 없음
+        failed, cb = self.closing_result(only_tags, "해시태그")
+        self.assertEqual((failed, cb["rule"]), ([], "해시태그"))
+        failed, cb = self.closing_result(only_tags.replace("**#선물포장 #다라동선물포장**\n", ""), "해시태그")
+        self.assertEqual((failed, cb["value"]), (["closing_block"], "누락/순서 오류: 해시태그"))
+        # 4) 소개이미지 없음 — 문의헤딩 + 장소카드 + 해시태그
+        failed, cb = self.closing_result(no_intro, "문의헤딩, 장소카드, 해시태그")
+        self.assertEqual((failed, cb["rule"]), ([], "문의 헤딩 → 장소 카드 → 해시태그"))
+
+    def test_custom_inquiry_heading_phrase(self):
+        # 문의 헤딩 문구를 바꿔도(`## 📞 상담 안내: …`) closing_block 통과 + h2_count 제외
+        t = self.upload_text().replace("## 📞 문의 안내:", "## 📞 상담 안내:")
+        res = self.run_upload(t)
+        self.assertEqual(self.failed(res), [], res)
+        self.assertEqual(res["stats"]["h2_count"], 4)
+
+    def test_missing_closing_row_stops_upload_only(self):
+        # 1.0.0 프로필(`마무리 블록` 행 없음·빈 값): upload는 exit 2, draft·final은 멈추지 않는다
+        for prof in (PROFILE_NO_CLOSING, v11_profile(blocks="")):
+            self.set_profile(prof)
+            p = self.write(os.path.join("cbm", "final.md"), self.upload_text())
+            r = subprocess.run([sys.executable, SCRIPT, p, "--stage", "upload"], capture_output=True, text=True)
+            self.assertEqual(r.returncode, 2)
+            self.assertIn("오류: ", r.stderr)
+            self.assertIn("마무리 블록", r.stderr)
+            self.assertEqual(self.failed(self.run_lint(self.good)), [])
+            self.run_lint(self.body, stage="draft")  # 멈추지 않음
+
+    def test_invalid_closing_blocks_exit_2_on_upload(self):
+        self.set_profile(v11_profile(blocks="문의헤딩, 소개이미지"))
+        p = self.write(os.path.join("cb", "final.md"), self.upload_text())
+        r = subprocess.run([sys.executable, SCRIPT, p, "--stage", "upload"], capture_output=True, text=True)
+        self.assertEqual(r.returncode, 2)
+        self.assertIn("마무리 블록 값이 올바르지 않습니다: 해시태그 없음", r.stderr)
+
+    # ---- title_region ----
+    def test_title_region_skip_when_no_regions(self):
+        self.set_profile(v11_profile(regions=""))
+        for t in (self.good, self.good.replace(", title_region: 가나동", "")):
+            res = self.run_lint(t)
+            by = self.by_id(res)
+            self.assertEqual((by["title_region"]["result"], by["title_region"]["detail"]), ("SKIP", "고객 지역 없음"))
+            self.assertEqual(self.failed(res), [])
+
+    # ---- related_links / --own-posts ----
+    def no_links(self):
+        return (self.good.replace("[관련글1](https://blog.naver.com/example_blog/1)\n", "")
+                .replace("[관련글2](https://blog.naver.com/example_blog/2)\n", ""))
+
+    def test_related_links_warn_when_few_own_posts(self):
+        self.set_own_posts(1)  # 기본 경로 <kdir>/../work/own-posts.json
+        res = self.run_lint(self.no_links())
+        rl = self.by_id(res)["related_links"]
+        self.assertEqual((rl["result"], rl["rule"]), ("WARN", "자기 글 2편 미만 — 링크 생략 허용"))
+        self.assertEqual(rl["value"], "[[ 0건, 관련글 0개")
+        self.assertEqual((self.failed(res), res["pass"]), ([], True))
+        self.set_own_posts(0)
+        self.assertEqual(self.by_id(self.run_lint(self.no_links()))["related_links"]["result"], "WARN")
+
+    def test_related_links_fail_when_enough_own_posts(self):
+        self.set_own_posts(3)
+        self.assertEqual(self.failed(self.run_lint(self.no_links())), ["related_links"])
+        self.set_own_posts(2)
+        self.assertEqual(self.failed(self.run_lint(self.no_links())), ["related_links"])
+
+    def test_related_links_warn_without_own_posts_file(self):
+        res = self.run_lint(self.no_links())
+        rl = self.by_id(res)["related_links"]
+        self.assertEqual((rl["result"], rl["rule"]), ("WARN", "own-posts.json 없음 — 글 목록 갱신 전"))
+        self.assertEqual((self.failed(res), res["pass"]), ([], True))
+
+    def test_related_links_pass_and_placeholder_still_fail(self):
+        self.set_own_posts(1)
+        self.assertEqual(self.by_id(self.run_lint(self.good))["related_links"]["result"], "PASS")
+        self.assertEqual(self.failed(self.run_lint(self.no_links() + "\n[[관련글]]\n")), ["related_links"])  # 남은 자리표시는 오류
+
+    def test_own_posts_option_overrides_default_path(self):
+        custom = self.write(os.path.join("elsewhere", "posts.json"), json.dumps([{"title": "하나"}]))
+        p = self.write("nl.md", self.no_links())
+        r = subprocess.run([sys.executable, SCRIPT, p, "--stage", "final", "--json", "--own-posts", custom],
+                           capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual({c["id"]: c for c in json.loads(r.stdout)["checks"]}["related_links"]["result"], "WARN")
+        r = subprocess.run([sys.executable, SCRIPT, p, "--stage", "final"], capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0)  # 기본 경로에 파일 없음 → WARN(own-posts.json 없음)
+
+    # ---- 부록 A 픽스처 ----
+    def use_fixture(self, name):
+        with open(os.path.join(FIXTURES, name), encoding="utf-8") as f:
+            self.set_profile(f.read())
+
+    def test_personal_fixture_upload(self):
+        self.use_fixture("profile-personal.md")
+        text = self.upload_text()
+        for gone in (f"![]({self.intro_img})\n", ":::place 예시상회:::\n", "## 📞 문의 안내: 000-0000-0000\n"):
+            text = text.replace(gone, "")
+        res = self.run_upload(text)
+        by = self.by_id(res)
+        self.assertEqual(self.failed(res), [], res)
+        self.assertEqual(by["closing_block"]["rule"], "해시태그")
+        self.assertEqual(by["closing_block"]["result"], "PASS")
+        self.assertEqual(by["tone"]["result"], "WARN")  # 본문이 합니다체
+        self.assertEqual((by["title_region"]["result"], by["title_region"]["detail"]), ("SKIP", "고객 지역 없음"))
+
+    def test_business_fixture_upload(self):
+        self.use_fixture("profile-business.md")
+        res = self.run_upload(self.upload_text())
+        self.assertEqual(self.failed(res), [], res)
+        by = self.by_id(res)
+        self.assertEqual(by["closing_block"]["rule"], "문의 헤딩 → 소개 이미지 → 장소 카드 → 해시태그")
+        self.assertEqual((by["tone"]["result"], by["title_region"]["result"]), ("PASS", "PASS"))
 
 
 if __name__ == "__main__":

@@ -173,6 +173,24 @@ class DiffPublishedTest(unittest.TestCase):
         self.assertFalse(r["title"]["changed"])
         self.assertIn("찾지 못함", r["summary"])
 
+    def test_closing_block_kept_with_custom_inquiry_heading(self):
+        md = PUB_MD.replace("## 📞 문의 안내:", "## 📞 상담 안내:")
+        self.assertIn("상담 안내", md)
+        pub = self.write("pub-custom.json", json.dumps({"stats": {"title": TITLE}, "markdown": md}, ensure_ascii=False))
+        self.assertTrue(diff_published.compare(self.final, pub)["closing_block_kept"])
+
+    def test_closing_block_not_applicable_for_personal_profile(self):
+        kd = os.path.join(self.root, "knowledge_personal")
+        os.makedirs(kd, exist_ok=True)
+        fx = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "profile-personal.md")
+        with open(fx, encoding="utf-8") as f, open(os.path.join(kd, "business-profile.md"), "w", encoding="utf-8") as g:
+            g.write(f.read())
+        pub = self.write("pub-personal.json", json.dumps(
+            {"stats": {"title": TITLE}, "markdown": PUB_MD.split("## 📞")[0]}, ensure_ascii=False))
+        r = diff_published.compare(self.final, pub, knowledge=kd)
+        self.assertIsNone(r["closing_block_kept"])
+        self.assertIn("마무리 블록(📞→해시태그): 해당 없음", r["summary"])
+
     def test_md_input_same_as_json(self):
         a = diff_published.compare(self.final, self.pub_json)
         b = diff_published.compare(self.final, self.pub_md)

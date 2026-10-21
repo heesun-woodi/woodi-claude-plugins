@@ -134,7 +134,7 @@ NAVER_BLOG_ID=example_blog naver-blog-cli create-draft \
 
 ### create-draft-from-folder 세부 (이 플러그인이 호출하는 명령)
 
-`naver_upload.sh`는 임시 작업 폴더 `$WORK`에 `body.md`(frontmatter·H1·B안 주석을 뺀 본문)와 `images/00-cover.png`(글 폴더의 표지 복사본)를 만든 뒤 호출한다:
+`naver_upload.sh`는 임시 작업 폴더 `$WORK`에 `body.md`(frontmatter·H1·B안 주석을 뺀 본문)와 `images/00-cover.png`(글 폴더의 표지 복사본)를 만든 뒤 호출한다. 본문 끝 마무리 블록은 프로필 `마무리 블록` 행에 든 항목만 들어 있다(`build_final.py`가 조립) — `:::place` 줄은 `장소카드`가 있을 때만, `photos/business-intro.png` 이미지는 `소개이미지`가 있을 때만 있고, 셸의 해당 검사·경고도 그때만 돈다(`--dry-run`의 `[dry-run] 장소 지시문: …` 줄도 `장소카드`일 때만):
 
 ```bash
 NAVER_BLOG_ID=<blogId> naver-blog-cli create-draft-from-folder "$WORK" \
@@ -150,7 +150,7 @@ NAVER_BLOG_ID=<blogId> naver-blog-cli create-draft-from-folder "$WORK" \
   |---|---|
   | `0:표지` | 표지를 본문 맨 앞에 넣음. 실패하면 `0:표지 넣기 실패(<사유>)` — 표지만 빠지고 글은 계속 작성됨 |
   | `대표 지정` / `대표 지정 실패` | `set_rep_image(0)` 결과. 실패해도 임시저장은 됨 → 셸은 `경고: 대표이미지 지정 실패 — …` (exit 0) |
-  | `<N>:장소(<고른 곳>)` | `:::place 검색어:::`가 검색 결과 첫 번째로 고른 장소(24자까지). 셸이 값을 로그·성공 출력에 `장소: …`로 남기고 업체명이 없으면 `경고: 장소 카드 확인 필요 — <값>` |
+  | `<N>:장소(<고른 곳>)` | `:::place 검색어:::`가 검색 결과 첫 번째로 고른 장소(24자까지). 본문에 `:::place`가 있을 때(프로필 `마무리 블록`에 `장소카드`가 있을 때)만 나온다. 셸이 값을 로그·성공 출력에 `장소: …`로 남기고 업체명이 없으면 `경고: 장소 카드 확인 필요 — <값>`(`장소카드`일 때만) |
   | `카테고리=…`, `태그 N개`, `설정 실패(…)` | 발행 레이어 설정 결과. `설정 실패`면 셸이 `경고: 카테고리/태그 설정 실패 …` |
   | `<N>:이미지` 등 | 본문 블록별 기록 |
 
@@ -191,7 +191,7 @@ NAVER_BLOG_ID=<blogId> naver-blog-cli create-draft-from-folder "$WORK" \
 | `![캡션](로컬경로)` | 사진 + 캡션 |
 | `:::file 로컬경로:::` | 파일 첨부(개당 10MB) |
 | `:::formula ...:::` | 수식 |
-| `:::place 검색어:::` | 장소(검색 결과 첫 번째) |
+| `:::place 검색어:::` | 장소(검색 결과 첫 번째). 이 플러그인은 프로필 `마무리 블록`에 `장소카드`가 있을 때만 쓴다 |
 | `:::video 유튜브 주소:::` | 유튜브 플레이어(watch, youtu.be, shorts만) |
 | `:::news` / `:::stock` / `:::book` | 글감 카드(이 플러그인은 쓰지 않음) |
 

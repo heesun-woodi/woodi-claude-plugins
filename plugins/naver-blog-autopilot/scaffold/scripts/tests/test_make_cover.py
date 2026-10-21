@@ -51,6 +51,48 @@ class MakeCoverTest(unittest.TestCase):
         self.assertIn("px", out)
         self.assertFalse(os.path.exists(self.out))
 
+    def _profile(self, text):
+        with open(os.path.join(self.tmp.name, "knowledge", "business-profile.md"), "w", encoding="utf-8") as f:
+            f.write(text)
+
+    def test_dry_run_phone_from_profile(self):
+        _, out, _ = run(["--bg", self.bg, "--title", "제목", "--out", self.out, "--dry-run"])
+        self.assertIn("전화: 000-0000-0000", out)
+
+    def test_dry_run_no_phone(self):
+        self._profile("| 항목 | 내용 |\n|---|---|\n| 업체명 | 민수의 노트 |\n| 연락처 | |\n")
+        code, out, _ = run(["--bg", self.bg, "--title", "제목", "--out", self.out, "--dry-run"])
+        self.assertEqual(code, 0)
+        self.assertIn("전화: 없음", out)
+
+    def test_no_phone_draws_cover_without_phone_line(self):
+        self._profile("| 항목 | 내용 |\n|---|---|\n| 업체명 | 민수의 노트 |\n| 연락처 | |\n")
+        code, _, err = run(["--bg", self.bg, "--title", "제목|부제", "--out", self.out])
+        self.assertEqual(code, 0, err)  # 연락처가 비어도 exit 2가 아니다
+        with Image.open(self.out) as im:
+            self.assertEqual(im.size, (1000, 1000))
+        # 전화 줄이 있으면 하단 중앙에 흰 글자가 생긴다 — 없는 표지의 하단 띠는 어둡게만 남는다
+        out_phone = os.path.join(self.tmp.name, "images", "with-phone.png")
+        self.assertEqual(run(["--bg", self.bg, "--title", "제목|부제", "--out", out_phone, "--phone", "000-0000-0000"])[0], 0)
+        with Image.open(self.out) as a, Image.open(out_phone) as b:
+            box = (300, 880, 700, 930)
+            bright = lambda im: im.crop(box).convert("L").point(lambda v: 255 if v > 200 else 0).getbbox() is not None
+            self.assertFalse(bright(a))
+            self.assertTrue(bright(b))
+
+    def test_phone_option_overrides_empty_profile(self):
+        self._profile("| 항목 | 내용 |\n|---|---|\n| 업체명 | 민수의 노트 |\n| 연락처 | |\n")
+        _, out, _ = run(["--bg", self.bg, "--title", "제목", "--out", self.out, "--dry-run", "--phone", "010-1111-2222"])
+        self.assertIn("전화: 010-1111-2222", out)
+
+    def test_brand_still_required(self):
+        self._profile("| 항목 | 내용 |\n|---|---|\n| 업체명 | |\n| 연락처 | 02-000-0000 |\n")
+        code, _, err = run(["--bg", self.bg, "--title", "제목", "--out", self.out])
+        self.assertEqual(code, 2)
+        self.assertIn("`업체명` 행이 비어 있습니다", err)
+        self.assertIn("--brand", err)
+        self.assertFalse(os.path.exists(self.out))
+
     def test_long_line_wraps(self):
         title = "선물 포장 리본 묶기 순서와 준비물 상자 고르기 총정리 안내"
         code, out, _ = run(["--bg", self.bg, "--title", title, "--out", self.out, "--dry-run"])

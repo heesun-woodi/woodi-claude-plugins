@@ -1,6 +1,6 @@
 ---
 name: blog-design-system
-description: Use when the user wants to create or update the blog's content design system document (knowledge/design-system.md) from its design references — e.g. "디자인 시스템 만들어줘", "디자인 시스템 갱신해줘", "레퍼런스 추가했어", "글 스타일 가이드 만들어줘", "블로그 디자인 가이드", "레퍼런스 블로그 분석해서 규칙 만들어줘", "blog-design-system", "build the blog design system", "update the style guide from references". Measures each reference post with scripts/fetch_post.py, turns the "why" note written for each reference into numeric rules, and writes knowledge/design-system.md (sections ①~⑨ + 부록 A/B, with the lint block in ④). Do NOT use for writing a post draft (use blog-draft-writer), for topic research (use blog-topic-research), or for SEO scoring of a draft (use blog-naver-seo).
+description: Use when the user wants to create or update the blog's content design system document (knowledge/design-system.md) from its design references — e.g. "디자인 시스템 만들어줘", "디자인 시스템 갱신해줘", "레퍼런스 추가했어", "글 스타일 가이드 만들어줘", "블로그 디자인 가이드", "레퍼런스 블로그 분석해서 규칙 만들어줘", "blog-design-system", "build the blog design system", "update the style guide from references". Measures each reference post with scripts/fetch_post.py, turns the "why" note written for each reference into numeric rules, and writes knowledge/design-system.md (sections ①~⑨ + 부록 A/B, with the lint block in ④). Fills ② from the profile's 톤 row (합니다체 or 해요체) and ③·⑥·⑦ from the 마무리 블록 and 고객 지역 rows. A new blog with no posts of its own (no 'own-style' reference) takes the ★ 레퍼런스 0 없음 path (external references only, lint defaults marked as initial values). Do NOT use for writing a post draft (use blog-draft-writer), for topic research (use blog-topic-research), or for SEO scoring of a draft (use blog-naver-seo).
 ---
 
 # 블로그 디자인 시스템 만들기·갱신하기
@@ -32,12 +32,12 @@ ls -d knowledge scripts && ls knowledge/business-profile.md knowledge/source-blo
 
 ## 1. 입력 수집과 모드 결정
 
-1. `knowledge/business-profile.md`를 읽는다 — 업체정보 표, "## 꼭 지켜야 할 점", "## 금칙어"(백틱 단어 전부), "## 홍보/정보 비율".
+1. `knowledge/business-profile.md`를 읽는다 — 업체정보 표(②·③·⑤·⑥·⑦을 채울 때 쓰는 `톤`·`마무리 블록`·`문의 헤딩 문구`·`고객 지역`·`이미지 소스` 행 포함), "## 꼭 지켜야 할 점", "## 금칙어"(백틱 단어 전부), "## 홍보/정보 비율".
 2. `knowledge/source-blogs.json`에서 `design_references[]`(각 `blogId`, `logNo`, `url`, `why`, 선택 `role`)와 `own_blog`(`blogId`, `categories.info`)를 읽는다.
-   `role: "own-style"` 항목(자기 글 — 겉모습·구조·분량의 기준)은 **레퍼런스 0**이고 측정 파일은 `own-<logNo>`다. 나머지 레퍼런스 번호 n은 배열 순서(1부터)다.
-3. 모드 결정:
-   - `knowledge/design-system.md`가 **없으면 → 생성 모드**.
-   - **있으면 → 갱신 모드**. 순서가 고정이다:
+   `role: "own-style"` 항목(자기 글 — 겉모습·구조·분량의 기준)은 **레퍼런스 0**이고 측정 파일은 `own-<logNo>`다. 나머지 레퍼런스 번호 n은 배열 순서(1부터)다. `own-style` 항목이 없으면(또는 자기 글이 0편이면) 아래 「★ 레퍼런스 0 없음」 경로다.
+3. 모드 결정 — scaffold가 `knowledge/design-system.md` 템플릿을 미리 복사해 두므로 **파일이 있다고 갱신 모드가 아니다**:
+   - 파일이 **없거나 템플릿 초기값이면 → 생성 모드**. 템플릿 초기값 판정: 머리 표의 `버전` 값이 `[버전]`이거나, 제목(첫 줄 `# …`)에 `[업체명]`이 남아 있음(플러그인 템플릿 형식 `{{버전}}`·`{{업체명}}`도 같다).
+   - **채워진 문서면(위 둘 다 아님) → 갱신 모드**. 순서가 고정이다:
      1) 기존 `knowledge/design-system.md`를 `work/design-system/design-system.prev-<YYYY-MM-DD>.md`(백업)와 `work/design-system/proposed.md`(작업본) 두 곳에 복사한다.
      2) **작업본 `proposed.md`를 직접 고친다** — 바꾸는 것은 새 측정값에서 나온 **수치(④ 규칙·lint 블록 값·근거 괄호)와 부록 A·B의 행**뿐이다.
      3) 보존: 담당자가 손으로 고친 문장(특히 ② 예시 문장, ⑧ 금칙), 다른 스킬이 lint 블록에 추가한 키(예: `kw_min_body`, `title_min`), 기존 절·문단.
@@ -47,16 +47,36 @@ ls -d knowledge scripts && ls knowledge/business-profile.md knowledge/source-blo
 
 ```bash
 mkdir -p work/design-system
-if [ -f knowledge/design-system.md ]; then
-  cp knowledge/design-system.md "work/design-system/design-system.prev-$(date +%F).md" && cp knowledge/design-system.md work/design-system/proposed.md && echo "갱신 모드"
-else echo "생성 모드"; fi
+F=knowledge/design-system.md
+if [ ! -f "$F" ] || grep -qE '^# .*(\[업체명\]|\{\{업체명\}\})' "$F" || grep -qE '^\| *버전 *\| *(\[버전\]|\{\{버전\}\}) *\|' "$F"; then
+  echo "생성 모드"    # 없음 또는 템플릿 초기값 — 5단계가 이 파일을 채워 덮어쓴다
+else
+  cp "$F" "work/design-system/design-system.prev-$(date +%F).md" && cp "$F" work/design-system/proposed.md && echo "갱신 모드"
+fi
 ```
 
 산출물: 모드(생성/갱신), 갱신 모드면 `work/design-system/design-system.prev-<날짜>.md`(백업)·`work/design-system/proposed.md`(작업본).
 
+## ★ 「레퍼런스 0 없음」 생성 경로 (자기 글이 없는 새 블로그)
+
+**판정**: 자기 블로그 글이 0편(`fetch_posts.py` 결과가 비어 있음)이거나 `source-blogs.json`의 `design_references`에 `role: "own-style"` 항목이 없으면 이 경로다. `own-style` 유무는 1단계에서, 글 0편은 2단계 수집의 `자기 글: 0`으로 확정한다. **생성 모드에서만** 적용한다 — 갱신 모드(채워진 문서)는 prev의 값을 보존한다. 측정할 자기 기준이 없다는 사실을 문서에 숨기지 않고 **초기값**으로 표시하는 경로다.
+
+| 단계 | 평소 | 레퍼런스 0 없음 |
+|---|---|---|
+| 2 측정 | 레퍼런스 + 자기 글 최신 10편 + `own-style` | **외부 레퍼런스(`design_references`)만** 측정한다(`ONLY=ref`). 자기 글 수집·`own-*` 파일 없음. 외부 레퍼런스도 0개면 2~3단계를 건너뛰고 측정표 없이 진행한다(머리 표의 측정표 칸 = `없음`) |
+| 3 측정표 | 레퍼런스·자기 글 중앙값 2행 | 레퍼런스 중앙값 1행(자기 글 행·자기 글 중앙값 없음) |
+| 4 추적표 | 레퍼런스 0 기본 쪼개기 7조각 + 레퍼런스 1~n | 레퍼런스 0 행 **없음**. 외부 레퍼런스(1~n) why 조각만 |
+| 5 수치 | 레퍼런스 0의 M · 메모 출처 레퍼런스 M · 중앙값 R | 구조·분량 수치(글자수·소제목 수·이미지 수·출처 수·태그 수·본문 키워드·제목 길이)는 **lint 기본값 = ④ 초기값**: `min_chars=1500 max_chars=4000 min_h2=4 max_h2=7 min_images=3 min_sources=2 tags_min=5 tags_max=10 kw_min_body=3 kw_max_body=8 title_min=20 title_max=40`(6단계 형식 예시와 같은 값 — 7단계 샘플 lint로 대조). 외부 레퍼런스 메모가 가리키는 특징(굵게·이미지당 글자수·소제목당 글자수·현장 사진 등)만 5단계 공식 그대로 쓴다. 외부 레퍼런스 중앙값 R은 근거 괄호에만 병기. 근거 괄호에 "초기값(lint 기본값) — 측정 전"을 적는다 |
+| ② 예시 문장 | `own-*.md`에서 그대로 복사(`(logNo)`) | 자기 글이 없으므로 템플릿의 `톤`별 **초기 예시**를 그대로 두고 "초기 예시 — 첫 글 뒤 실제 문장으로 교체"를 적는다. 문장을 지어내지 않는다 |
+| ⑦ · 부록 B | 자기 글 측정값(많이 쓴 값 메모 · 중앙값 행) | 「**측정 전 초기값 — 첫 글 뒤 갱신 권장**」 한 줄을 ⑦ 끝과 부록 B에 적는다(부록 B는 레퍼런스 중앙값 행만, 자기 글·차이 행 없음) |
+| 7 자체 점검 | `NFRAG` = 레퍼런스 0 기본 7조각 + 레퍼런스 1~n의 why 조각 수 | `NFRAG` = **외부 레퍼런스 why 조각 수만**(0이면 부록 A 행 수 점검 생략). ② 예시 문장 `grep -F` 점검은 초기 예시라 건너뛴다 |
+| 8 보고 | 검토 요청 3가지 | 첫 항목을 "② 톤 예시는 초기 예시입니다"로 바꾸고, 첫 글을 임시저장한 뒤 그 글을 `design_references`에 `role: "own-style"`(why = 구조·모습 전체)로 넣고 이 스킬을 다시 실행하면(갱신 모드) 자기 글 기준으로 바뀐다는 안내를 덧붙인다 |
+
+갱신 모드에서 `own-style`이 생기면 위 초기값 표기(⑦·부록 B의 「측정 전 초기값 — 첫 글 뒤 갱신 권장」, 근거 괄호의 "초기값(lint 기본값) — 측정 전", ②의 "초기 예시")를 새 측정값·실제 예시 문장으로 바꾸며 지운다.
+
 ## 2. 레퍼런스·자기 글 측정 (읽기 전용 수집)
 
-각 글에 `python3 scripts/fetch_post.py <blogId> <logNo> --json`을 실행한다. 출력은 `{"stats": {...}, "markdown": "..."}`이고 stats 키는 정확히 다음과 같다:
+각 글에 `python3 scripts/fetch_post.py <blogId> <logNo> --json`을 실행한다. **이미 측정한 글은 다시 받지 않는다**: 온보딩(O4·O7a)이 미리 측정해 둔 `work/design-system/own-<logNo>.json`·`ref-<n>-<blogId>.json`이 있고 그 안 `stats`의 `blogId`·`logNo`가 같으면 fetch를 생략하고 그 파일을 재사용한다(아래 스크립트가 자동으로 하고 `재사용 n`을 출력한다. logNo가 다르면 다시 받아 덮어쓴다). 출력은 `{"stats": {...}, "markdown": "..."}`이고 stats 키는 정확히 다음과 같다:
 `blogId, logNo, title, chars, paragraphs, headings, images, bold_runs, bold_lines, quotes, links_out, links_naver_blog, oglinks`.
 (`headings`는 fs24/fs19 글씨 또는 sectionTitle 문단만 센다 — 굵은 줄로 만든 소제목은 `bold_lines`에 들어간다. 3단계에서 보정한다.)
 
@@ -69,29 +89,43 @@ else echo "생성 모드"; fi
 
 ```bash
 ONLY=all python3 - <<'PY'   # ONLY=ref(레퍼런스만) | own(자기 글만) | all(기본)
-import json, subprocess, time, os
+import json, subprocess, time, os, glob
 ONLY = os.environ.get("ONLY", "all")
 D = "work/design-system"; os.makedirs(D, exist_ok=True)
 src = json.load(open("knowledge/source-blogs.json", encoding="utf-8"))
-own = src["own_blog"]; own_id = own["blogId"]; own_cat = own["categories"]["info"]
-refs = [r for r in src["design_references"] if r.get("role") != "own-style"]
+own = src.get("own_blog") or {}; own_id = own.get("blogId") or ""; own_cat = (own.get("categories") or {}).get("info")
+refs = [r for r in src.get("design_references", []) if r.get("role") != "own-style"]
 jobs = [(r["blogId"], r["logNo"], f"ref-{i}-{r['blogId']}") for i, r in enumerate(refs, 1)] if ONLY in ("ref", "all") else []
 
 def posts(flag):
+    if not own_id: return []
     out = subprocess.run(["python3", "scripts/fetch_posts.py", flag, own_id], capture_output=True, text=True, encoding="utf-8")
     return json.loads(out.stdout) if out.returncode == 0 and out.stdout.strip() else []
 mine = [p for p in posts("--rss") if p["category"] == own_cat] if ONLY in ("own", "all") else []
-if ONLY in ("own", "all") and len(mine) < 10:
+if ONLY in ("own", "all") and own_cat and len(mine) < 10:
     seen = {p["logNo"] for p in mine}
     mine += [p for p in posts("--all") if p["category"] == own_cat and p["logNo"] not in seen]
 mine = sorted(mine, key=lambda p: p["date"], reverse=True)[:10]
 jobs += [(own_id, p["logNo"], f"own-{p['logNo']}") for p in mine]
 if ONLY in ("own", "all"):  # 레퍼런스 0(own-style)은 최신 10편 밖이어도 측정
-    jobs += [(r["blogId"], r["logNo"], f"own-{r['logNo']}") for r in src["design_references"]
+    jobs += [(r["blogId"], r["logNo"], f"own-{r['logNo']}") for r in src.get("design_references", [])
              if r.get("role") == "own-style" and r["logNo"] not in {p["logNo"] for p in mine}]
 
-failed = []
+def reuse(blog, log, stem):  # 온보딩(O4·O7a)이 이미 측정한 같은 글(blogId·logNo 일치)은 다시 받지 않는다
+    cands = glob.glob(f"{D}/ref-*.json") if stem.startswith("ref-") else [f"{D}/{stem}.json"]
+    for p in cands:
+        try: s = json.load(open(p, encoding="utf-8"))["stats"]
+        except (OSError, ValueError, KeyError): continue
+        if str(s.get("blogId")) == str(blog) and str(s.get("logNo")) == str(log) and os.path.isfile(p[:-5] + ".md"):
+            if p[:-5] != f"{D}/{stem}":  # 레퍼런스 번호가 바뀌었으면 새 이름으로 옮긴다(같은 글의 중복 파일 방지)
+                os.replace(p, f"{D}/{stem}.json"); os.replace(p[:-5] + ".md", f"{D}/{stem}.md")
+            return True
+    return False
+
+failed, reused = [], 0
 for blog, log, stem in jobs:
+    if reuse(blog, log, stem):
+        reused += 1; continue
     r = subprocess.run(["python3", "scripts/fetch_post.py", blog, log, "--json"], capture_output=True, text=True, encoding="utf-8")
     if r.returncode != 0:
         failed.append(f"{stem}: {r.stderr.strip()[:200]}"); continue
@@ -99,7 +133,7 @@ for blog, log, stem in jobs:
     json.dump(data, open(f"{D}/{stem}.json", "w", encoding="utf-8"), ensure_ascii=False, indent=2)
     open(f"{D}/{stem}.md", "w", encoding="utf-8").write(data["markdown"])
     time.sleep(0.5)
-print("수집:", len(jobs) - len(failed), "/", len(jobs), "| 자기 글:", len(mine))
+print("수집:", len(jobs) - len(failed), "/", len(jobs), f"(재사용 {reused})", "| 자기 글:", len(mine))
 print("실패:", failed or "없음")
 PY
 ```
@@ -180,6 +214,8 @@ def row(path):
             "도입부 유형": "", "구조 유형": "", "소제목(수동)": ""}
 refs = [row(p) for p in sorted(glob.glob(f"{D}/ref-*.json"))]
 owns = [row(p) for p in sorted(glob.glob(f"{D}/own-*.json"))]
+if not (refs or owns):
+    raise SystemExit("측정 대상 없음 — 측정표를 만들지 않는다(★ 레퍼런스 0 없음 경로)")
 cols = list((refs or owns)[0].keys())
 def med(rows, k):
     v = [r[k] for r in rows if isinstance(r[k], (int, float))]
@@ -233,7 +269,7 @@ PY
 
 ## 4. 메모 → 측정값 → 규칙 추적표 (부록 A 초안)
 
-`design_references`의 `why`를 의미 단위 조각으로 나눈다. 레퍼런스 0(`own-style`)은 아래 기본 쪼개기 7조각을 쓰고, 레퍼런스 1~n은 각 why를 같은 방식으로 쪼갠다(**모든 조각을 전부 덮어야 한다** — 조각 수를 세어 두고 7단계 점검에 쓴다).
+`design_references`의 `why`를 의미 단위 조각으로 나눈다. 레퍼런스 0(`own-style`)이 있으면 아래 기본 쪼개기 7조각을 쓰고(★ 레퍼런스 0 없음 경로면 이 7조각은 없다), 레퍼런스 1~n은 각 why를 같은 방식으로 쪼갠다(**모든 조각을 전부 덮어야 한다** — 조각 수를 세어 두고 7단계 점검에 쓴다).
 `role: own-style` 레퍼런스 0은 메모가 "구조·모습 전체"이므로 각 조각을 `own-<logNo>.md`의 **관찰 메모(구조 사실)** + lint 세는 법으로 환산한 수치로 댄다. 레퍼런스 1~n의 조각은 종류에 맞는 측정값 열을 고른다 — 아래 `(예)` 행은 가상 메모로 보인 대응 예다:
 
 | 레퍼런스 | 메모 조각 | 대응 측정값(measurements.md 열) | 들어갈 절 |
@@ -243,8 +279,8 @@ PY
 | 0 자기 글 | 표·이모지 목록 | 관찰 메모(표 수·이모지 줄·💡 줄), bold_runs/1000자, quotes | ③, ④ |
 | 0 자기 글 | (구조·모습) 절 끝 이미지 | images(표지·업체소개 제외 환산), 이미지당 글자수, 관찰 메모(이미지 위치·캡션) | ④, ⑤ |
 | 0 자기 글 | FAQ | 관찰 메모(FAQ 절·문답 수) | ③, ⑥ |
-| 0 자기 글 | 업체소개 이미지·지도·해시태그 | 관찰 메모(끝 블록 순서·해시태그 수) | ⑤, ⑥ |
-| 0 자기 글 | (담당자 결정) 합니다체 | 해요체 비율(참고), ② 예시 문장 | ② |
+| 0 자기 글 | 업체소개 이미지·지도·해시태그(프로필 `마무리 블록`에 든 항목만) | 관찰 메모(끝 블록 순서·해시태그 수) | ⑤, ⑥ |
+| 0 자기 글 | (프로필 `톤` 결정) 합니다체 또는 해요체 | 해요체 비율(참고), ② 예시 문장 | ② |
 | (예) 1 | 한눈에 들어오는 구성 | 소제목(수동), 구조 유형, 관찰 메모 | ③ |
 | (예) 1 | 핵심 문장이 굵게 눈에 띔 | bold_runs/1000자, bold_lines, quotes | ④ |
 | (예) 1 | 글 끝에 같은 블로그 다른 글 링크 | 끝부분 관련글 링크 수, links_naver_blog | ⑥ |
@@ -273,7 +309,7 @@ PY
 메모 출처 레퍼런스가 둘 이상이면 그 값들의 범위를 쓴다(예: 메모 출처 레퍼런스 두 곳의 이미지당 글자수 240·310). 중앙값으로 메모 출처 값을 희석하지 않는다 — 다른 레퍼런스는 그 특징 때문에 뽑힌 글이 아니다.
 레퍼런스 값을 측정할 수 없으면(예: 음영 배경색은 fetch_post가 추출하지 못함) 근거 괄호에 "측정 불가"와 대체 방법을 쓴다.
 **자기 글 중앙값(O)과 메모 없는 쪽 중앙값은 공식에 넣지 않고 근거 괄호에만 병기한다**(자기 글이 짧아도 규칙이 끌려 내려가지 않게).
-**레퍼런스 0(`own-style`)이 있으면** 구조·분량 특징(글자수·소제목·이미지·이미지당 글자수·굵게)의 M은 레퍼런스 0이며, 아래 공식의 R·M 자리에 넣는다. 다른 레퍼런스 메모와 겹치면 레퍼런스 0이 우선이다. M은 lint 세는 법으로 환산한다(글자수 = 목차 절·해시태그 줄·`ㅤ` 제외, 소제목 = 목차·문의 제외, 이미지 = 표지·업체소개 제외). 굵게는 기본 허용폭(하한 내림(M×0.7), 상한 올림(M×1.3))을 쓴다(아래 굵게 공식은 강조 메모 출처 레퍼런스가 강조 과다일 때 쓰는 상한식).
+**레퍼런스 0(`own-style`)이 있으면** 구조·분량 특징(글자수·소제목·이미지·이미지당 글자수·굵게)의 M은 레퍼런스 0이며, 아래 공식의 R·M 자리에 넣는다. 다른 레퍼런스 메모와 겹치면 레퍼런스 0이 우선이다. M은 lint 세는 법으로 환산한다(글자수 = 목차 절·해시태그 줄·`ㅤ` 제외, 소제목 = 목차·문의 제외, 이미지 = 표지·업체소개 제외). 굵게는 기본 허용폭(하한 내림(M×0.7), 상한 올림(M×1.3))을 쓴다(아래 굵게 공식은 강조 메모 출처 레퍼런스가 강조 과다일 때 쓰는 상한식). **레퍼런스 0이 없으면** 위 ★ 절의 5단계 규칙(분량 수치는 lint 기본값 = ④ 초기값)을 따른다.
 모든 수치 뒤 괄호에 근거를 쓴다: `(강조 메모 출처 ref-1의 1000자당 굵게 11.5회 → 상한 내림(11.5×0.7) = 8, 하한 = 다른 레퍼런스 최댓값 2.4 올림 = 3)`(예 — 가상 값).
 
 > **계수는 조정 가능한 기본값이다.** 담당자 검토에서 바꾸면 이 표, ④의 근거 괄호, 부록 A의 해당 행을 **함께** 갱신한다.
@@ -289,10 +325,10 @@ PY
 | 소제목당 글자수 | 10단위 반올림(R_소제목당글자수 × 0.7) ~ (× 1.3) | ×0.7~×1.3 = 허용폭(플러그인 기본값) | — |
 | 강조(굵게) 빈도 | 1000자당 bold_runs: 상한 = 내림(M_e × 0.7), 하한 = 다른 레퍼런스 중 굵게를 쓰는 글의 최댓값 올림(없으면 반올림(M_e × 0.3)) | 근거 메모 = 강조 메모 출처 레퍼런스(M_e). ×0.7 = 허용폭(플러그인 기본값). 레퍼런스 0이 있으면 내림(M_0×0.7)~올림(M_0×1.3) | — |
 | 음영 인용 | 글당 0 ~ max(1, 절 끝 요약 박스 수), `>` 인용, 절 끝 요약·주의사항에만. 레퍼런스 0이 있으면 0 ~ max(1, 레퍼런스 0의 강조용 인용 수) | "음영" 메모는 측정 불가 → naver-blog-cli가 지원하는 `>` 인용으로 대체. quotes 열은 인용구 소제목이 섞이므로 그대로 쓰지 않는다(강조용 인용만 센 보정값 — 템플릿 「자기 블로그 기준 측정 절차」의 수동 열 판정 메모) | — |
-| 관련글 링크 | 2~3개 | 플러그인 기본값(고정 골격). 관련글 메모를 남긴 레퍼런스가 있으면 그 메모 수치와 "끝부분 관련글 링크 수"를 근거로 병기 | — |
+| 관련글 링크 | 자기 글이 2편 이상일 때 2~3개, 2편 미만이면 생략 허용(lint `related_links` WARN) | 플러그인 기본값(고정 골격). 관련글 메모를 남긴 레퍼런스가 있으면 그 메모 수치와 "끝부분 관련글 링크 수"를 근거로 병기 | — |
 | 출처 각주 | 2 | `lint_post.py` 기본 `min_sources`. 레퍼런스와 무관 — "지어내기 금지" 원칙 | `min_sources` |
 | 태그 수 | 5~10 | `lint_post.py` 기본값. `knowledge/naver-seo-checklist.md`에 태그 기준이 있으면 그 값 | `tags_min`, `tags_max` |
-| 톤 | **정성 규칙**: "주 종결어미 = 합니다체"(담당자 결정) 등 + 자기 글 실제 예시 문장(logNo) | 숫자(해요체 비율·평균 문장 길이 참고값)는 근거 괄호에만. 숫자 목표를 규칙으로 쓰지 않는다 | — |
+| 톤 | **정성 규칙**: 프로필 `톤` 값이 정한다 — `합니다체`면 "주 종결어미 = 합니다체" + 합니다체 판 허용/금지 종결 표, `해요체`면 "주 종결어미 = 해요체" + 해요체 판 허용/금지 종결 표(템플릿 ②에 두 판이 있다 — 하나만 남긴다) + 자기 글 실제 예시 문장(logNo, ★ 경로면 초기 예시) | 숫자(해요체 비율·평균 문장 길이 참고값)는 근거 괄호에만. 숫자 목표를 규칙으로 쓰지 않는다. 측정한 해요체 비율(참고)이 `톤`과 크게 어긋나면 8단계 검토 요청에 한 줄 | — |
 | 정보:홍보 | 정보성 3 : 홍보 1 이하, 최근 4편 중 홍보 ≤ 1편 | business-profile.md "## 홍보/정보 비율" 값. "4편" = 3:1 비율의 한 주기 | — |
 
 R 값이 `-`(분모 0 등)인 항목은 계산하지 말고 기본값(lint 기본값 또는 위 고정값)을 쓴 뒤 "담당자 검토 요청"에 올린다.
@@ -323,7 +359,7 @@ R 값이 `-`(분모 0 등)인 항목은 계산하지 말고 기본값(lint 기�
 
 ```bash
 F=knowledge/design-system.md   # 갱신 모드: F=work/design-system/proposed.md
-NFRAG=<4단계 표의 조각 수>       # 레퍼런스 0 기본 7조각 + 레퍼런스 1~n의 why 조각 수
+NFRAG=<4단계 표의 조각 수>       # 레퍼런스 0 기본 7조각 + 레퍼런스 1~n의 why 조각 수 (★ 레퍼런스 0 없음: 외부 레퍼런스 why 조각 수만 — 0이면 부록 A 행 수 점검 생략)
 python3 - "$F" "$NFRAG" <<'PY'
 import re, sys
 t = open(sys.argv[1], encoding="utf-8").read()
@@ -364,15 +400,15 @@ rm -rf work/design-system/_lintcheck
 
 눈으로 확인할 목록:
 - [ ] ⑧ 금칙어 절에 business-profile.md 금칙어 **전부**(위 스크립트 "빠진 금칙어: 없음").
-- [ ] ⑦ 변주 축 **4개**(도입부 유형·구조 템플릿·지역 키워드 조합·제목 지역 `title_region`) + `type`(축 아님), `cta` 축 없음, `title_region` 로테이션(최근 4편에 안 쓰인 첫 고객 지역), "소제목 수는 변주 축이 아니다", "최근 5편(work/variation-log.md)과 겹치지 않게"(최근 5줄 각각과 2개 축 이상 다름), 로그 7열(`… | region | title_region`).
-- [ ] ⑤에 "텍스트 렌더링 금지"(예외 = 표지 `00-cover.png` 합성 제목, AI 배경엔 글자 없음), "얼굴 클로즈업 금지", "정보성 = AI 허용", "홍보성 = 실사진" 4개 모두 + 본문 이미지 캡션 없음 + 절 끝 배치 + `photos/business-intro.png` 고정 자산(재사용 금지 예외).
-- [ ] ⑥에 관련글 링크 **2~3개** + 고정 마무리 블록 순서(`## 📞 문의 안내: <연락처>` → business-intro.png → `:::place <장소 검색어>:::` → `**#태그…**`), 줄글 CTA 없음, 장소 검색어는 business-profile.md 표에서.
+- [ ] ⑦ 변주 축: 프로필 `고객 지역`이 있으면 **4개**(도입부 유형·구조 템플릿·지역 키워드 조합·제목 지역 `title_region`), 없으면 2개(도입부 유형·구조 템플릿)이고 region·title_region 행이 없음 + `type`(축 아님), `cta` 축 없음, `title_region` 로테이션(고객 지역이 있을 때: 최근 4편에 안 쓰인 첫 고객 지역), "소제목 수는 변주 축이 아니다", "최근 5편(work/variation-log.md)과 겹치지 않게"(최근 5줄 각각과 4개 축 중 2개 이상 다름 — 고객 지역이 없으면 2개 축 중 1개 이상), 로그 7열(`… | region | title_region` — 고객 지역이 없으면 두 열은 `-`).
+- [ ] ⑤에 "텍스트 렌더링 금지"(예외 = 표지 `00-cover.png` 합성 제목, AI 배경엔 글자 없음), "얼굴 클로즈업 금지", "정보성 = AI 허용"(프로필 `이미지 소스`에 `stock`이 있으면 스톡 사진도 허용), "홍보성 = 실사진" 4개 모두 + 본문 이미지 캡션 없음 + 절 끝 배치 + (프로필 `마무리 블록`에 `소개이미지`가 있을 때만) `photos/business-intro.png` 고정 자산(재사용 금지 예외).
+- [ ] ⑥에 관련글 링크 규칙(자기 글 2편 이상이면 **2~3개**, 2편 미만이면 생략 허용) + 고정 마무리 블록 순서 — 프로필 `마무리 블록`에 든 항목만 `문의헤딩`(`## 📞 <문의 헤딩 문구>: <연락처>`) → `소개이미지`(business-intro.png) → `장소카드`(`:::place <장소 검색어>:::`) → `해시태그`(`**#태그…**`) 순서, 줄글 CTA 없음, 장소 검색어는 business-profile.md 표에서(`장소카드`일 때).
 - [ ] ⑧에 출처 형식 규칙(`(출처: URL)` 단독 괄호만, 조항·시행일은 문장 본문에, lint `source_format`, 업로드본에서 제거).
 - [ ] ⑨에 정보성 3 : 홍보 1 비율 + 근거 "최근 4편(variation-log.md의 type 열) 중 홍보 ≤ 1편; 로그가 없으면 gates.md ## 선택의 유형".
-- [ ] ⑦에 `variation:` 기록 키로 `type`(정보|홍보)·`title_region` 포함.
+- [ ] ⑦에 `variation:` 기록 키로 `type`(정보|홍보)·`title_region` 포함(고객 지역이 없으면 `title_region: -`).
 - [ ] ④ 규칙 문장의 숫자 = lint 블록의 숫자(키마다 대조).
 - [ ] 부록 A가 **레퍼런스 전부 × why 조각 전부**를 덮음(4단계 표의 행이 모두 있음), 각 행에 실제 수치 또는 관찰 사실.
-- [ ] ② 예시 문장마다 `(logNo)`가 있고 해당 `own-<logNo>.md`에 그 문장이 그대로 있음(`grep -F`로 확인).
+- [ ] ② 톤 절에 프로필 `톤`에 맞는 판 하나만 남아 있음(합니다체 판 또는 해요체 판의 허용/금지 종결 표). 예시 문장마다 `(logNo)`가 있고 해당 `own-<logNo>.md`에 그 문장이 그대로 있음(`grep -F`로 확인 — ★ 레퍼런스 0 없음 경로는 초기 예시라 건너뜀).
 - [ ] 모든 수치 규칙 뒤에 근거 괄호.
 
 산출물: 점검 통과한 문서.
@@ -388,6 +424,8 @@ rm -rf work/design-system/_lintcheck
    > 1) ② 톤 예시 문장이 평소 담당자님 말투가 맞는지 (아니면 바꾸고 싶은 문장을 알려 주세요)
    > 2) ④ 분량 범위(글자수·소제목 수·이미지 수)가 부담스럽지 않은지
    > 3) ⑧ 금칙·주의에 빠진 것이 없는지 (계약·브랜드상 쓰면 안 되는 표현이 더 있다면 알려 주세요)
+
+   레퍼런스 0 없음 경로면 1)을 "② 톤 예시는 초기 예시입니다 — 첫 글을 쓴 뒤 실제 문장으로 바꿀 수 있습니다"로, 2)에 "분량 범위는 측정 전 초기값(lint 기본값)입니다 — 첫 글 뒤 갱신을 권장합니다"를 덧붙인다(★ 절 8행).
 4. 갱신 모드: 사용자가 승인하면 `cp work/design-system/proposed.md knowledge/design-system.md` → 7단계의 lint 확인(샘플 chars 규칙) 실행. 승인 전에는 `knowledge/`를 바꾸지 않는다.
 
 담당자의 답을 받아 고친 내용은 `knowledge/design-system.md`에 직접 반영하고 머리말 "담당자 검토"를 날짜로 바꾼다.

@@ -9,22 +9,24 @@
   seo_title_length(title 글자수 title_min~title_max, 기본 20~40).
 - upload — 업로드본(final.md, build_final.py 결과). final 검사에서 sources·seo_image_captions를 SKIP하고
   전용 검사 5종을 더한다: sources_stripped(`출처:`·`[출처](` 0건), captions_empty(alt 있는 이미지 0건),
-  cover_file(<글 폴더>/images/00-cover.png 존재 + 본문 미참조), closing_block(`## 📞 문의`로 시작하는 헤딩(기본 `## 📞 문의 안내`) →
-  `business-intro` 이미지 → `:::place` → `**#` 순서), h2_spacing(목차 포함 모든 `## ` 바로 윗줄이 빈 줄이고 그 위에 U+3164(ㅤ)만 있는 줄이 1줄 이상 연속 —
+  cover_file(<글 폴더>/images/00-cover.png 존재 + 본문 미참조), closing_block(프로필 `마무리 블록`에 적힌 항목만 이 고정 순서로:
+  문의 헤딩(`## 📞` 접두) → 소개 이미지(`business-intro`) → 장소 카드(`:::place`) → 해시태그(`**#`); `마무리 블록` 행이 없거나 올바르지 않으면 exit 2), h2_spacing(목차 포함 모든 `## ` 바로 윗줄이 빈 줄이고 그 위에 U+3164(ㅤ)만 있는 줄이 1줄 이상 연속 —
   `ㅤ`×N(N>=1, 빌더 기본 2) → 빈 줄 → `## `).
 
-모든 단계 공통: tone(해요체 종결 0건 — `~세요` 권유·필요/중요 같은 명사는 예외; 의문문은 `까요?·나요?·ㅂ니까?/습니까?·인가요?·세요?`만 허용),
+모든 단계 공통: tone(프로필 `톤`이 합니다체(또는 `톤` 행 없음)면 해요체 종결 0건 FAIL — `~세요` 권유·필요/중요 같은 명사는 예외; 의문문은 `까요?·나요?·ㅂ니까?/습니까?·인가요?·세요?`만 허용.
+해요체면 합니다체 종결(`~습니다`·`~입니다`·`~됩니다`) 문장 수를 WARN으로만 알린다),
 source_format(`출처:` 출현 수 == `(출처: https://…)` 단독 괄호 수, 링크형 `[출처](` 0건, 괄호 URL 안 `(` 0건), title_region(frontmatter의
-variation.title_region이 business-profile.md `고객 지역`에 있고 title에 포함; frontmatter 없으면 SKIP),
+variation.title_region이 business-profile.md `고객 지역`에 있고 title에 포함; frontmatter 없거나 `고객 지역`이 비면 SKIP),
 learned_avoid(knowledge/learned-preferences.md `## 피할 표현…` 절 `- ` 줄의 첫 백틱 표현이 본문(frontmatter·주석·`**`·URL·`(출처: …)` 제외,
 공백 무시)에 있으면 — 공백 뺀 2자 이하 표현은 짧아서 무시(detail에 표시)
 **WARN** — result 값 "WARN"은 pass 판정에 들어가지 않는다(pass = FAIL 0건). 파일이 없거나 UTF-8로 읽을 수 없으면 SKIP(후자는 stderr 경고)).
 
 카운트 제외 규칙: chars·seo_keyword_body는 `## 📑 목차` 절(다음 `---` 줄까지)·해시태그 줄(`**#…**`/`#태그`)·
-U+3164를 빼고 센다. h2_count는 `## 📑 목차`·`## 📞 문의` 줄을, images는 파일명에 `00-cover`·`business-intro`가
+U+3164를 빼고 센다. h2_count는 `## 📑 목차`·`## 📞`로 시작하는 줄을, images는 파일명에 `00-cover`·`business-intro`가
 든 이미지를 뺀다. 임계값은 design-system.md의 lint 블록 키로 조정한다.
 설정(기본값 없음 — 비어 있으면 오류 메시지와 exit 2): knowledge/business-profile.md `## 금칙어` 절(금칙어가 없으면 `- 없음` 한 줄)·`고객 지역` 행,
 final·upload 단계는 --blog-id(없으면 작업 폴더(knowledge/의 상위) .env의 NAVER_BLOG_ID — related_links가 그 블로그 글 링크를 센다).
+related_links는 --own-posts(기본 <knowledge>/../work/own-posts.json)의 글이 2편 미만이거나 파일이 없으면 WARN만.
 """
 import argparse
 import json
@@ -41,6 +43,11 @@ DEFAULTS = {"min_chars": 1500, "max_chars": 4000, "min_h2": 4, "max_h2": 7,
             "min_images": 3, "min_sources": 2, "tags_min": 5, "tags_max": 10,
             "kw_min_body": 3, "kw_max_body": 8, "title_min": 20, "title_max": 40}
 PROFILE_FILE = "business-profile.md"
+CLOSING_ORDER = ("문의헤딩", "소개이미지", "장소카드", "해시태그")  # 프로필 `마무리 블록` 항목의 고정 해석 순서
+CLOSING_LABELS = {"문의헤딩": "문의 헤딩", "소개이미지": "소개 이미지", "장소카드": "장소 카드", "해시태그": "해시태그"}
+BLOG_TYPES = ("업체", "전문가", "개인", "브랜드")
+TONES = {"합니다체": "formal", "해요체": "casual"}
+IMAGE_SOURCES = ("ai", "stock", "photo")
 TEMPLATE_VAR_RE = re.compile(r"\[[^\]]*\]")  # 템플릿의 `[치환 변수]`를 채우지 않은 값(fullmatch로 판정)
 REQUIRED_KEYS = ["title", "keyword", "category", "tags", "variation"]
 
@@ -64,11 +71,12 @@ Q_OK = ("까요", "나요", "니까", "인가요", "세요")  # 허용 의문문
 SENT_SPLIT_RE = re.compile(r"((?<!\d)[.!?](?!\d))")  # 구분자 포함 분리(? 판별용)
 TONE_URL_RE = re.compile(r"https?://[^\s)]+")
 TRAIL_RE = re.compile(r"[\W_]+$")
+FORMAL_END_RE = re.compile(r"니다$")  # 합니다체 종결 전반(~습니다·~입니다·~됩니다·~합니다·~드립니다)
 HASHTAG_TOKEN_RE = re.compile(r"#[^#\s]\S*")
 FILLER = "\u3164"
 FILLER_LINE_RE = re.compile(r"^\s*\u3164+\s*$")
 TITLE_REGION_RE = re.compile(r"title_region\s*:\s*([^,}\n]+)")
-TOC_H, CONTACT_H = "## 📑 목차", "## 📞 문의"  # 마무리 헤딩(기본 `## 📞 문의 안내`)도 CONTACT_H 접두로 판정
+TOC_H, CONTACT_H = "## 📑 목차", "## 📞"  # 문의 헤딩(`## 📞 <문의 헤딩 문구>: …`) 접두 — h2_count 제외·closing_block 공용
 EXCLUDED_IMAGES = ("00-cover", "business-intro")
 NOUN_YO = set("세필중주개수소강")  # ~세요 권유 + 필요·중요·주요·개요·수요·소요·강요(명사)
 LEARNED_FILE, AVOID_H = "learned-preferences.md", "## 피할 표현"
@@ -168,6 +176,53 @@ def load_regions(kdir):
     return regions
 
 
+def load_closing_blocks(kdir):
+    """프로필 `마무리 블록` → CLOSING_ORDER 순서로 정렬된 목록. 빈 값이면 ValueError(missing_row),
+    모르는 항목이나 `해시태그` 없음이면 ValueError("마무리 블록 값이 올바르지 않습니다: …")."""
+    items = profile_list(kdir, "마무리 블록")
+    if not items:
+        raise ValueError(missing_row("마무리 블록", kdir))
+    bad = next((i for i in items if i not in CLOSING_ORDER), None)
+    if bad is not None:
+        raise ValueError(f"마무리 블록 값이 올바르지 않습니다: {bad}")
+    if "해시태그" not in items:
+        raise ValueError("마무리 블록 값이 올바르지 않습니다: 해시태그 없음")
+    return [b for b in CLOSING_ORDER if b in items]
+
+
+def load_tone(kdir):
+    """프로필 `톤` → 'formal'(합니다체) | 'casual'(해요체). 빈 값 ValueError(missing_row), 그 밖 값 ValueError."""
+    v = profile_row(kdir, "톤")
+    if not v:
+        raise ValueError(missing_row("톤", kdir))
+    if v not in TONES:
+        raise ValueError(f"톤 값이 올바르지 않습니다: {v}")
+    return TONES[v]
+
+
+def load_image_sources(kdir):
+    """프로필 `이미지 소스` → ['ai','stock','photo'] 부분집합(적힌 순서 유지, 중복 제거). 빈 값·모르는 항목은 ValueError."""
+    items = profile_list(kdir, "이미지 소스")
+    if not items:
+        raise ValueError(missing_row("이미지 소스", kdir))
+    bad = next((i for i in items if i not in IMAGE_SOURCES), None)
+    if bad is not None:
+        raise ValueError(f"이미지 소스 값이 올바르지 않습니다: {bad}")
+    return list(dict.fromkeys(items))
+
+
+def own_posts_count(path):
+    """work/own-posts.json의 글 수(목록이면 길이, {"posts": [...]}도 허용). 파일 없음·파싱 실패·형식 불명은 None."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return None
+    if isinstance(data, dict):
+        data = data.get("posts")
+    return len(data) if isinstance(data, list) else None
+
+
 def load_blog_id(kdir):
     """자기 블로그 ID = 작업 폴더(knowledge/의 상위) .env의 NAVER_BLOG_ID. 없으면 ValueError."""
     env = os.path.join(os.path.dirname(os.path.abspath(kdir)), ".env") if kdir else None
@@ -241,9 +296,8 @@ def haeyo_end(seg):
     return True
 
 
-def tone_hits(body, skip_idx):
-    """본문 문단(소제목·인용·표·이미지·주석·목차 절·해시태그 줄·:::블록 제외)의 해요체 종결 문장 목록.
-    `?`로 끝나는 의문문은 끝이 Q_OK(까요·나요·니까·인가요·세요)면 허용, 그 밖의 `요?`·`죠?`는 해요체로 센다."""
+def _prose_sentences(body, skip_idx):
+    """본문 문단(소제목·인용·표·이미지·주석·목차 절·해시태그 줄·:::블록 제외)의 (문장, 의문문 여부) 목록."""
     kept = [ln for k, ln in enumerate(body) if k not in skip_idx and not is_hashtag_line(ln)]
     hits = []
     for ln in HTMLC_RE.sub("", "\n".join(kept)).split("\n"):
@@ -253,12 +307,20 @@ def tone_hits(body, skip_idx):
         ln = TONE_URL_RE.sub("", SRC_PAREN_RE.sub("", ln))  # `…해요(출처: URL).`의 문장 끝을 살린다
         parts = SENT_SPLIT_RE.split(ln)  # [문장, 구분자, 문장, 구분자, …, 마지막 문장]
         for j in range(0, len(parts), 2):
-            question = (parts[j + 1] if j + 1 < len(parts) else "") == "?"
-            if question and TRAIL_RE.sub("", parts[j]).endswith(Q_OK):
-                continue
-            if haeyo_end(parts[j]):
-                hits.append(parts[j].strip())
+            hits.append((parts[j], (parts[j + 1] if j + 1 < len(parts) else "") == "?"))
     return hits
+
+
+def tone_hits(body, skip_idx):
+    """본문 문단의 해요체 종결 문장 목록.
+    `?`로 끝나는 의문문은 끝이 Q_OK(까요·나요·니까·인가요·세요)면 허용, 그 밖의 `요?`·`죠?`는 해요체로 센다."""
+    return [seg.strip() for seg, question in _prose_sentences(body, skip_idx)
+            if not (question and TRAIL_RE.sub("", seg).endswith(Q_OK)) and haeyo_end(seg)]
+
+
+def formal_hits(body, skip_idx):
+    """본문 문단의 합니다체 종결(~습니다·~입니다·~됩니다 등 ~니다) 문장 목록 — 해요체 프로필의 WARN 용."""
+    return [seg.strip() for seg, _ in _prose_sentences(body, skip_idx) if FORMAL_END_RE.search(TRAIL_RE.sub("", seg))]
 
 
 def _img_path(path):
@@ -322,11 +384,15 @@ def check(cid, value, rule, result, detail=""):
     return {"id": cid, "value": value, "rule": rule, "result": result, "detail": detail}
 
 
-def lint_text(text, stage, th, forbidden, regions=None, post_dir=None, learned_avoid=None, blog_id=None):
-    """regions: 고객 지역 목록(없으면 title_region FAIL). post_dir: 글 폴더(upload의 cover_file 검사용).
+def lint_text(text, stage, th, forbidden, regions=None, post_dir=None, learned_avoid=None, blog_id=None,
+              tone_mode="formal", closing=None, own_posts=None):
+    """regions: 고객 지역 목록(비면 title_region SKIP). post_dir: 글 폴더(upload의 cover_file 검사용).
+    tone_mode: 'formal'(해요체 종결 FAIL) | 'casual'(합니다체 종결을 WARN으로만). closing: 검사할 마무리 블록 항목
+    (CLOSING_ORDER 부분집합, 기본 전부). own_posts: 자기 글 수(own_posts_count 결과) — 2 미만이면 related_links는 WARN만.
     learned_avoid: load_learned_avoid() 결과 [(표현, 규칙 id)] — None이면 learned_avoid 검사 SKIP.
     blog_id: 자기 블로그 ID — related_links가 https://blog.naver.com/<blog_id>/… 링크를 센다."""
     regions = list(regions or [])
+    closing = [b for b in CLOSING_ORDER if b in (closing if closing is not None else CLOSING_ORDER)]
     own_re = re.compile(r"https://blog\.naver\.com/" + re.escape(blog_id) + r"/[^\s)\]>\"']+") if blog_id else None
     lines = text.lstrip("﻿").split("\n")
     fm, body_start, fm_err = parse_frontmatter(lines)
@@ -370,7 +436,8 @@ def lint_text(text, stage, th, forbidden, regions=None, post_dir=None, learned_a
     src_bad_url = sum(1 for u in paren_urls if "(" in u)  # 제거하면 괄호가 남는 URL
     placeholders = len(PLACEHOLDER_RE.findall(prose))
     own = len(set(own_re.findall(prose))) if own_re else 0
-    tone = tone_hits(body, toc)
+    casual = tone_mode == "casual"
+    tone = formal_hits(body, toc) if casual else tone_hits(body, toc)
     tags = fm.get("tags") if fm else None
     if isinstance(tags, str) and tags and not tags.startswith("{"):
         tags = [t.strip().strip("'\"") for t in tags.split(",") if t.strip()]
@@ -413,14 +480,18 @@ def lint_text(text, stage, th, forbidden, regions=None, post_dir=None, learned_a
         skip("sources", "upload 단계 제외 — 업로드본은 출처를 지운다(sources_stripped로 확인)") if upload else
         check("sources", sources, f">={th['min_sources']}", "PASS" if sources >= th["min_sources"] else "FAIL"),
         check("placeholder_sources", placeholders, "0건", "FAIL" if placeholders else "PASS"),
-        check("tone", len(tone), "해요체 종결 0건", "FAIL" if tone else "PASS",
-              ("예: " + " / ".join(tone[:3])) if tone else ""),
+        (check("tone", len(tone), "합니다체 종결 0건 권장(해요체 프로필 — WARN만)", "WARN" if tone else "PASS",
+               ("예: " + " / ".join(tone[:3])) if tone else "") if casual else
+         check("tone", len(tone), "해요체 종결 0건", "FAIL" if tone else "PASS",
+               ("예: " + " / ".join(tone[:3])) if tone else "")),
         check("source_format", f"출처: {src_labels}건 / (출처: URL) {src_parens}건 / [출처]( {src_links}건",
               "출처: 수 == (출처: URL) 단독 괄호 수, [출처]( 0건, URL 안 ( 0건",
               "FAIL" if sf_why else "PASS", "; ".join(sf_why)),
     ]
     # title_region: frontmatter variation의 title_region ∈ 고객 지역, title에 포함
-    if fm is None:
+    if not regions:
+        c.append(skip("title_region", "고객 지역 없음"))
+    elif fm is None:
         c.append(skip("title_region", "frontmatter 없음" + ("(frontmatter 항목에서 보고)" if final else "")))
     else:
         m = TITLE_REGION_RE.search(fm_block)
@@ -487,8 +558,17 @@ def lint_text(text, stage, th, forbidden, regions=None, post_dir=None, learned_a
         else:
             c.append(check("tags_count", "형식 오류", "리스트", "FAIL", "리스트 형식 아님"))
         slots = prose.count("[[")
-        c.append(check("related_links", f"[[ {slots}건, 관련글 {own}개", f"[[ 0건, {blog_id or '자기 블로그'} 링크 >=2",
-                       "PASS" if slots == 0 and own >= 2 else "FAIL"))
+        few = own_posts is not None and own_posts < 2  # 링크할 자기 글이 2편 미만 — 링크 생략 허용(WARN만)
+        if slots == 0 and own >= 2:
+            rl = "PASS"
+        elif (few or own_posts is None) and slots == 0:
+            rl = "WARN"
+        else:
+            rl = "FAIL"
+        c.append(check("related_links", f"[[ {slots}건, 관련글 {own}개",
+                       ("자기 글 2편 미만 — 링크 생략 허용" if few else "own-posts.json 없음 — 글 목록 갱신 전") if rl == "WARN" else
+                       f"[[ 0건, {blog_id or '자기 블로그'} 링크 >=2", rl,
+                       f"자기 글 {own_posts}편" if few and rl == "WARN" else ""))
         bad, notes = [], []
         for cap, path in all_images:
             p = _img_path(path)
@@ -541,10 +621,11 @@ def lint_text(text, stage, th, forbidden, regions=None, post_dir=None, learned_a
                f"본문이 표지를 {refs}번 참조함(업로드 도구가 맨 앞에 넣으므로 본문에서 빼야 함)" if refs else "")
         c.append(check("cover_file", f"{'있음' if exists else '없음'}, 본문 참조 {refs}건",
                        "images/00-cover.png 존재 + 본문 미참조", "FAIL" if why else "PASS", why))
-        steps = [("문의 헤딩", lambda ln: ln.startswith(CONTACT_H)),
-                 ("업체소개 이미지", lambda ln: any("business-intro" in _img_path(p) for _, p in IMG_RE.findall(ln))),
-                 (":::place", lambda ln: ln.strip().startswith(":::place")),
-                 ("**# 해시태그", lambda ln: ln.strip().startswith("**#"))]
+        preds = {"문의헤딩": lambda ln: ln.startswith(CONTACT_H),
+                 "소개이미지": lambda ln: any("business-intro" in _img_path(p) for _, p in IMG_RE.findall(ln)),
+                 "장소카드": lambda ln: ln.strip().startswith(":::place"),
+                 "해시태그": lambda ln: ln.strip().startswith("**#")}
+        steps = [(CLOSING_LABELS[b], preds[b]) for b in closing]
         pos, miss = 0, []
         for name, pred in steps:
             k = next((k for k in range(pos, len(body)) if pred(body[k])), None)
@@ -553,7 +634,7 @@ def lint_text(text, stage, th, forbidden, regions=None, post_dir=None, learned_a
             else:
                 pos = k + 1
         c.append(check("closing_block", "누락/순서 오류: " + ", ".join(miss) if miss else "완전",
-                       "문의 헤딩 → 업체소개 이미지 → :::place → **#", "FAIL" if miss else "PASS"))
+                       " → ".join(n for n, _ in steps), "FAIL" if miss else "PASS"))
         nospace = [ln.strip() for k, ln in enumerate(body)
                    # 빈 줄 바로 위가 ㅤ 줄이면 그 위로 ㅤ가 몇 줄 더 있어도(N>=1) 통과
                    if ln.startswith("## ") and not (k > 1 and not body[k - 1].strip()
@@ -563,13 +644,21 @@ def lint_text(text, stage, th, forbidden, regions=None, post_dir=None, learned_a
     return {"stage": stage, "pass": all(x["result"] != "FAIL" for x in c), "checks": c, "stats": stats}
 
 
-def lint_file(path, stage, knowledge=None, blog_id=None):
+def lint_file(path, stage, knowledge=None, blog_id=None, own_posts_path=None):
     kdir = knowledge or find_knowledge(path)
     with open(path, encoding="utf-8") as f:
         text = f.read()
-    return lint_text(text, stage, load_thresholds(kdir), load_forbidden(kdir), load_regions(kdir),
+    forbidden = load_forbidden(kdir)  # knowledge/·프로필이 없으면 여기서 원인 문구로 멈춘다
+    tone_mode = load_tone(kdir) if profile_row(kdir, "톤") else "formal"  # 1.0.0 프로필(`톤` 없음)은 합니다체 규칙 유지
+    # closing_block은 upload에서만 검사 — `마무리 블록` 행이 없거나 올바르지 않으면 ValueError(exit 2, build_final·naver_upload와 같은 판정)
+    closing = load_closing_blocks(kdir) if stage == "upload" else None
+    own = None
+    if stage != "draft":
+        own = own_posts_count(own_posts_path or os.path.join(os.path.dirname(os.path.abspath(kdir)), "work", "own-posts.json"))
+    return lint_text(text, stage, load_thresholds(kdir), forbidden, profile_list(kdir, "고객 지역"),
                      os.path.dirname(os.path.abspath(path)), load_learned_avoid(kdir),
-                     None if stage == "draft" else blog_id or load_blog_id(kdir)), kdir
+                     None if stage == "draft" else blog_id or load_blog_id(kdir),
+                     tone_mode=tone_mode, closing=closing, own_posts=own), kdir
 
 
 def render_table(res):
@@ -591,7 +680,7 @@ def render_table(res):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(
-        description="블로그 글 마크다운(post.md)의 금칙어·분량·소제목·이미지·출처·frontmatter·합니다체 톤·제목 지역명과 네이버 SEO 정량 항목(키워드 본문·소제목 출현, 이미지 캡션, 제목 길이), 업로드본 형식(출처·캡션 제거, 표지, 마무리 블록, 소제목 여백)을 LLM 없이 결정적으로 검사합니다.",
+        description="블로그 글 마크다운(post.md)의 금칙어·분량·소제목·이미지·출처·frontmatter·톤(프로필 `톤`에 따라)·제목 지역명과 네이버 SEO 정량 항목(키워드 본문·소제목 출현, 이미지 캡션, 제목 길이), 업로드본 형식(출처·캡션 제거, 표지, 마무리 블록, 소제목 여백)을 LLM 없이 결정적으로 검사합니다.",
         epilog="종료 코드: 0=PASS, 1=FAIL(하나라도 실패), 2=사용 오류(파일 없음·stage 오류)",
         add_help=False)
     ap._positionals.title, ap._optionals.title = "인자", "옵션"
@@ -602,11 +691,14 @@ def main(argv=None):
                          "final: SEO 확인용(draft-v2.md) — seo_* 4종 포함 / "
                          "upload: 업로드본(final.md) — final에서 sources·seo_image_captions를 SKIP하고 "
                          "sources_stripped·captions_empty·cover_file·closing_block·h2_spacing 추가. "
-                         "공통: tone·source_format·title_region·learned_avoid(WARN만 — pass에 영향 없음)")
+                         "공통: tone·source_format·title_region·learned_avoid(tone은 해요체 프로필이면 WARN만, learned_avoid는 항상 WARN만 — pass에 영향 없음)")
     ap.add_argument("--knowledge", metavar="DIR",
                     help="knowledge 폴더(기본: post.md에서 위로 올라가며 knowledge/ 탐색)")
     ap.add_argument("--blog-id", metavar="ID",
                     help="자기 블로그 ID(final·upload의 관련글 링크 기준). 없으면 작업 폴더 .env의 NAVER_BLOG_ID")
+    ap.add_argument("--own-posts", metavar="PATH", dest="own_posts",
+                    help="자기 블로그 글 목록 JSON(기본: <knowledge>/../work/own-posts.json). 글이 2편 미만이면 "
+                         "related_links는 WARN만(링크 생략 허용)")
     ap.add_argument("--json", action="store_true", help="사람용 표 대신 JSON만 출력")
     try:
         a = ap.parse_args(argv)
@@ -619,7 +711,7 @@ def main(argv=None):
         print(f"오류: knowledge 폴더가 없습니다: {a.knowledge}", file=sys.stderr)
         return 2
     try:
-        res, kdir = lint_file(a.post, a.stage, a.knowledge, a.blog_id)
+        res, kdir = lint_file(a.post, a.stage, a.knowledge, a.blog_id, a.own_posts)
     except UnicodeDecodeError:
         print(f"오류: UTF-8로 읽을 수 없는 파일입니다: {a.post}", file=sys.stderr)
         return 2

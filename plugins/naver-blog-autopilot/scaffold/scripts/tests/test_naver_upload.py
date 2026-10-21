@@ -7,7 +7,7 @@ import unittest
 HERE = os.path.dirname(os.path.abspath(__file__))
 SCRIPTS = os.path.dirname(HERE)
 DESIGN = "# 디자인 시스템\n\n<!-- lint: min_chars=900 max_chars=6000 min_h2=3 max_h2=5 min_images=2 min_sources=1 tags_min=3 tags_max=6 -->\n"
-PROFILE = ("# 업체\n\n| 항목 | 내용 |\n|---|---|\n| 업체명 | 예시상회 |\n| 고객 지역 | 가나동, 다라동 |\n\n"
+PROFILE = ("# 업체\n\n| 항목 | 내용 |\n|---|---|\n| 업체명 | 예시상회 |\n| 고객 지역 | 가나동, 다라동 |\n| 마무리 블록 | 문의헤딩, 소개이미지, 장소카드, 해시태그 |\n\n"
            "## 금칙어\n\n- `금지어예시`\n")
 ENV = "NAVER_BLOG_ID=example_blog\n"  # 작업 폴더 .env — --blog-id 가 없을 때의 블로그·lint related_links 기준
 
@@ -172,6 +172,83 @@ class NaverUploadTest(unittest.TestCase):
         self.assertIn("표지: " + self.cover, p.stdout)
         self.assertIn("장소 지시문: :::place 예시상회:::", p.stdout)
         self.assertNotIn("create-draft-from-folder", self.stub_calls())
+
+    # --- 마무리 블록 조건부 검사(프로필 `마무리 블록`) ---
+    HASHTAGS = "**#선물포장 #리본묶기 #가나동선물포장 #다라동선물포장 #포장준비물**\n"
+
+    def set_blocks(self, blocks):
+        with open(os.path.join(self.root, "knowledge", "business-profile.md"), "w", encoding="utf-8") as f:
+            f.write(PROFILE.replace("문의헤딩, 소개이미지, 장소카드, 해시태그", blocks))
+
+    def hashtag_only_final(self):
+        links = "[관련글1](https://blog.naver.com/example_blog/1)\n[관련글2](https://blog.naver.com/example_blog/2)\n\n"
+        self.write_final(self.sample(tail=links + self.HASHTAGS))
+
+    def test_hashtag_only_dry_run_passes_without_place_or_intro(self):
+        self.set_blocks("해시태그")
+        os.remove(self.intro)
+        self.hashtag_only_final()
+        p = self.run_script("--dry-run")
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertNotIn("장소 지시문", p.stdout)
+        self.assertIn("이미지 수: 3", p.stdout)
+
+    def test_place_directive_still_required_with_place_card(self):
+        self.set_blocks("해시태그")   # lint 는 해시태그만 보지만 …
+        self.hashtag_only_final()
+        self.set_blocks("장소카드, 해시태그")   # … 프로필이 장소카드를 요구하면 :::place 가 있어야 한다
+        lp = os.path.join(self.root, "scripts", "lint_post.py")
+        with open(lp, encoding="utf-8") as f:
+            src = f.read()
+        marker = 'if __name__ == "__main__":\n    sys.exit(main())'
+        with open(lp, "w", encoding="utf-8") as f:
+            f.write(src.replace(marker, 'if __name__ == "__main__":\n    sys.exit(0)'))   # lint 무력화 — 셸 이중 검사만 본다
+        p = self.run_script("--dry-run")
+        self.assertEqual(p.returncode, 11, p.stderr)
+        self.assertIn(":::place 지시문 없음", p.stderr)
+
+    def test_hashtag_always_required(self):
+        self.set_blocks("해시태그")
+        lp = os.path.join(self.root, "scripts", "lint_post.py")
+        with open(lp, encoding="utf-8") as f:
+            src = f.read()
+        marker = 'if __name__ == "__main__":\n    sys.exit(main())'
+        with open(lp, "w", encoding="utf-8") as f:
+            f.write(src.replace(marker, 'if __name__ == "__main__":\n    sys.exit(0)'))
+        self.write_final(self.sample(tail="마무리 문단입니다.\n"))
+        p = self.run_script("--dry-run")
+        self.assertEqual(p.returncode, 11, p.stderr)
+        self.assertIn("**# 해시태그 줄 없음", p.stderr)
+        self.assertNotIn(":::place", p.stderr)
+
+    def test_no_place_warning_without_place_card(self):
+        self.set_blocks("해시태그")
+        self.hashtag_only_final()
+        p = self.run_script(STUB_CREATE="noplace")
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertNotIn("장소 카드 확인 필요", p.stderr)
+        self.assertNotIn("  장소:", p.stdout)
+        with open(os.path.join(self.post, "upload.log"), encoding="utf-8") as f:
+            self.assertNotIn("장소 카드 확인 필요", f.read())
+
+    def test_place_warning_kept_with_place_card(self):
+        p = self.run_script(STUB_CREATE="noplace")   # 기본 프로필 = 장소카드 포함
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertIn("경고: 장소 카드 확인 필요", p.stderr)
+
+    def test_closing_blocks_unreadable_exit_2(self):
+        with open(os.path.join(self.root, "knowledge", "business-profile.md"), "w", encoding="utf-8") as f:
+            f.write(PROFILE.replace("| 마무리 블록 | 문의헤딩, 소개이미지, 장소카드, 해시태그 |\n", ""))
+        lp = os.path.join(self.root, "scripts", "lint_post.py")   # lint 를 건너뛰어 프로필 읽기 실패만 본다
+        with open(lp, encoding="utf-8") as f:
+            src = f.read()
+        marker = 'if __name__ == "__main__":\n    sys.exit(main())'
+        with open(lp, "w", encoding="utf-8") as f:
+            f.write(src.replace(marker, 'if __name__ == "__main__":\n    sys.exit(0)'))
+        p = self.run_script("--dry-run")
+        self.assertEqual(p.returncode, 2, p.stderr)
+        self.assertIn("프로필 마무리 블록을 읽지 못했습니다", p.stderr)
+        self.assertIn("`마무리 블록` 행이 비어 있습니다", p.stderr)
 
     def test_relative_image_blocked_by_lint(self):
         self.write_final(self.sample(img="images/01-cover.png"))

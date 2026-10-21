@@ -85,7 +85,7 @@ python3 scripts/feedback_log.py add --post <NNN-slug> --stage 직접 --category 
    ```
    - `fetch exit`가 0이 아니면(비공개·삭제·주소 오류·네트워크) `published.json`을 지우고(`rm -f`) 출력 첫 줄을 보여 준 뒤 직접 입력 모드로.
    - `diff exit=2`면 멈추고 출력 첫 줄을 보고한다.
-4. 담당자에게 보여 준다: `summary` 전체, 제목 전후(`title.changed`면), `headings.renamed`·`added`·`removed`, `paragraphs.changed` 상위 5개(전 → 후), `paragraphs.removed`·`added` 상위 5개, `tone`·`length`·`images`, `closing_block_kept`가 false면 "마무리 블록(📞 문의 → 해시태그)이 발행본에서 보이지 않습니다".
+4. 담당자에게 보여 준다: `summary` 전체, 제목 전후(`title.changed`면), `headings.renamed`·`added`·`removed`, `paragraphs.changed` 상위 5개(전 → 후), `paragraphs.removed`·`added` 상위 5개, `tone`·`length`·`images`, `closing_block_kept`가 **false일 때만** "마무리 블록(📞→해시태그)이 발행본에서 보이지 않습니다"(null = 해당 없음 — 프로필 `마무리 블록`에 `문의헤딩`이 없는 경우 — 이면 이 문장을 쓰지 않는다).
    제목·소제목·문단 변화가 하나도 없으면 "발행본이 업로드본과 같습니다(정규화 기준)"라고 알리고 1-A(직접 입력)를 제안한다.
 5. **패턴 제안**: 바뀐 점 가운데 **다음 글에도 해당할 패턴**으로 보이는 것만 1~4개 피드백 문장으로 만든다. 한 글자 오타·특정 수치 정정처럼 그 글에만 해당하는 수정은 제안하지 않는다.
    | 바뀐 점 | 피드백 문장 예 | 범주 |

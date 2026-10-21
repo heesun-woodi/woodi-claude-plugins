@@ -6,9 +6,9 @@
     uv run --with pillow scripts/gen_image.py <image-plan.md>          # OpenAI(표준 라이브러리 HTTP — google-genai 불필요)
     python3 scripts/gen_image.py <image-plan.md> --dry-run      # 키·패키지 없이 제공자 결정·프롬프트·파일명만 출력
 
-- 표에서 `유형`이 ai·cover인 행만 처리한다(photo 행은 건드리지 않음). cover 행은 images/00-bg.png로 저장하고
+- 표에서 `유형`이 ai·cover인 행만 처리한다(photo·stock 행은 건드리지 않음 — stock은 fetch_stock.py). cover 행은 images/00-bg.png로 저장하고
   `파일` 칸(images/00-cover.png)은 바꾸지 않는다 — 합성은 scripts/make_cover.py. 슬롯 번호 = draft-v2.md의 `![슬롯: …]()` 순서.
-- 프롬프트 = PROMPT_PREFIX + 표의 프롬프트 + PROMPT_SUFFIX. 두 문자열은
+- 프롬프트 = 접두 + 표의 프롬프트 + PROMPT_SUFFIX. 접두의 장면구는 프로필 `이미지 기본 장면` 행(없으면 `Korean everyday scene`)이고, 접두·접미 문자열은
   skills/blog-image-director/references/prompt-patterns.md의 "공통 접두/접미"와 글자 그대로 같아야 한다. 제공자와 무관하게 같다.
 - 성공한 슬롯은 표의 `파일` 열을 post 폴더 기준 상대경로(images/01-cover.png)로 갱신해 image-plan.md를 다시 쓴다.
 - 설정(.env): IMAGE_PROVIDER(gemini|openai, 선택) · GEMINI_API_KEY · OPENAI_API_KEY · IMAGE_MODEL(선택).
@@ -49,7 +49,7 @@ DEFAULT_MODEL = "gemini-3-pro-image"  # product-mockup generate_scenes.py와 같
 PROVIDERS = ("gemini", "openai")
 DEFAULT_MODELS = {"gemini": DEFAULT_MODEL, "openai": "gpt-image-2"}
 KEY_NAMES = {"gemini": "GEMINI_API_KEY", "openai": "OPENAI_API_KEY"}
-ENV_NAMES = ("IMAGE_PROVIDER", "GEMINI_API_KEY", "OPENAI_API_KEY", "IMAGE_MODEL")
+ENV_NAMES = ("IMAGE_PROVIDER", "GEMINI_API_KEY", "OPENAI_API_KEY", "IMAGE_MODEL", "PEXELS_API_KEY")  # PEXELS_API_KEY는 fetch_stock용 — 제공자 판정(KEY_NAMES)에는 영향 없음
 KEY_HELP = {"gemini": "GEMINI_API_KEY 발급: https://aistudio.google.com/apikey (결제 설정된 프로젝트의 키)",
             "openai": "OPENAI_API_KEY 발급: https://platform.openai.com/api-keys"}
 OPENAI_IMAGES_URL = "https://api.openai.com/v1/images/generations"
@@ -69,12 +69,14 @@ QUOTA_HINT = ("Gemini 이미지 모델은 결제(Billing)가 설정된 Google Cl
 BASE_BACKOFF_SECONDS = 2.0
 # 추정치 — gemini-3-pro-image 2K 단가는 요금 페이지에서 확인(https://ai.google.dev/pricing)
 COST_PER_IMAGE_USD = 0.04
-KINDS = {"ai", "photo", "cover"}
+KINDS = {"ai", "photo", "cover", "stock"}  # stock = Pexels 검색(fetch_stock.py) — photo처럼 여기서는 건너뜀
 GEN_KINDS = {"ai", "cover"}  # cover = 표지 배경(00-bg.png). 합성은 make_cover.py
 
 # prompt-patterns.md "공통 접두/접미"와 동일하게 유지할 것(tests/test_gen_image.py가 대조).
-PROMPT_PREFIX = ("photorealistic, Korean local business scene, "
-                 "no text, no letters, no watermark, no close-up faces")
+# 장면구(DEFAULT_SCENE)만 프로필 `이미지 기본 장면` 행으로 바뀐다. PROMPT_PREFIX = 기본 장면구를 넣은 접두(prompt-patterns.md와 대조).
+DEFAULT_SCENE = "Korean everyday scene"
+PROMPT_PREFIX_FMT = "photorealistic, {scene}, no text, no letters, no watermark, no close-up faces"
+PROMPT_PREFIX = PROMPT_PREFIX_FMT.format(scene=DEFAULT_SCENE)
 PROMPT_SUFFIX = ("natural light, wide landscape 3:2 composition, people only seen from behind or far away, "
                  "no brand logos, no readable signs, no license plates, no numbers")
 
@@ -127,7 +129,7 @@ def parse_plan(text):
                      "kind": get("kind").lower(), "prompt": get("prompt"),
                      "caption": get("caption"), "file": get("file"), "line": i})
         if rows[-1]["kind"] not in KINDS:
-            print(f"경고: 슬롯 {rows[-1]['slot']}의 유형 '{get('kind')}'은 ai/photo/cover가 아니어서 건너뜁니다.", file=sys.stderr)
+            print(f"경고: 슬롯 {rows[-1]['slot']}의 유형 '{get('kind')}'은 ai/photo/stock/cover가 아니어서 건너뜁니다.", file=sys.stderr)
     if idx is None:
         raise ValueError("image-plan.md에서 '| 슬롯 | …' 표 머리를 찾지 못했습니다.")
     return idx, rows
@@ -181,8 +183,21 @@ def target_name(row):
     return f"{row['slot']}-{slug_for(row['purpose'])}.png"
 
 
-def build_prompt(scene):
-    return f"{PROMPT_PREFIX}. {scene.strip().rstrip('.')}. {PROMPT_SUFFIX}."
+def build_prompt(scene, base_scene=None):
+    """base_scene: 프로필 `이미지 기본 장면` 값(None·빈 값이면 DEFAULT_SCENE)."""
+    prefix = PROMPT_PREFIX_FMT.format(scene=(base_scene or "").strip().rstrip(".") or DEFAULT_SCENE)
+    return f"{prefix}. {scene.strip().rstrip('.')}. {PROMPT_SUFFIX}."
+
+
+def load_base_scene(kdir):
+    """knowledge/business-profile.md `이미지 기본 장면` 행(없거나 비면 ""). kdir가 None이어도 안전."""
+    if not kdir:
+        return ""
+    try:
+        from lint_post import profile_row
+    except ImportError:
+        return ""
+    return profile_row(kdir, "이미지 기본 장면")
 
 
 def rewrite_plan(text, idx, updates):
@@ -467,6 +482,7 @@ def main(argv=None):
     ap.add_argument("--model", help=f"이미지 모델(기본: IMAGE_MODEL → gemini={DEFAULT_MODELS['gemini']}, "
                                     f"openai={DEFAULT_MODELS['openai']})")
     ap.add_argument("--env", metavar="PATH", help="키가 든 .env 경로를 직접 지정")
+    ap.add_argument("--knowledge", metavar="DIR", help="knowledge 폴더(기본: image-plan.md 위로 찾음) — 프로필 `이미지 기본 장면`을 읽음")
     ap.add_argument("--dry-run", action="store_true", help="API 호출 없이 제공자 결정·슬롯·프롬프트·파일명만 출력")
     try:
         a = ap.parse_args(argv)
@@ -492,7 +508,9 @@ def main(argv=None):
     out_dir = os.path.abspath(a.out_dir) if a.out_dir else plan_dir
     post_dir = os.path.dirname(plan_dir)
     n_photo = sum(1 for r in rows if r["kind"] == "photo")
-    print(f"슬롯 {len(rows)}개 (ai {sum(1 for r in rows if r['kind'] == 'ai')}, photo {n_photo}) → 이번 대상 ai {len(targets)}개")
+    n_stock = sum(1 for r in rows if r["kind"] == "stock")
+    stock_txt = f", stock {n_stock}" if n_stock else ""  # stock이 없으면 1.0.0 출력 그대로
+    print(f"슬롯 {len(rows)}개 (ai {sum(1 for r in rows if r['kind'] == 'ai')}, photo {n_photo}{stock_txt}) → 이번 대상 ai {len(targets)}개")
     if not targets:
         print("생성할 ai 슬롯이 없습니다.")
         return 0
@@ -500,6 +518,15 @@ def main(argv=None):
         if not r["prompt"]:
             print(f"오류: 슬롯 {r['slot']}의 프롬프트 칸이 비어 있습니다.", file=sys.stderr)
             return 2
+    if a.knowledge:
+        kdir = a.knowledge
+    else:
+        try:
+            from lint_post import find_knowledge
+            kdir = find_knowledge(a.plan)
+        except ImportError:
+            kdir = None
+    base_scene = load_base_scene(kdir)
 
     env = find_env(a.plan, a.env)
     try:
@@ -521,7 +548,7 @@ def main(argv=None):
             tag = " (cover: 표지 배경 → make_cover.py로 합성)" if r["kind"] == "cover" else ""
             print(f"\n[{r['slot']}] 목적: {r['purpose']}{tag} | 캡션: {r['caption']}")
             print(f"  파일: {os.path.relpath(out, post_dir)}")
-            print(f"  프롬프트: {build_prompt(r['prompt'])}")
+            print(f"  프롬프트: {build_prompt(r['prompt'], base_scene)}")
         print(f"\n(dry-run) API 호출 없음. {cost_line(provider, len(targets))}")
         return 0
 
@@ -561,7 +588,7 @@ def main(argv=None):
         for r in targets:
             out = os.path.join(out_dir, target_name(r))
             try:
-                data = gen(build_prompt(r["prompt"]))
+                data = gen(build_prompt(r["prompt"], base_scene))
                 res = save_image(data, out, a.size)
             except StopRemaining as e:
                 rest = [t["slot"] for t in targets[targets.index(r):]]

@@ -2,7 +2,7 @@
 # naver_upload.sh — final.md → 네이버 블로그 "임시저장"까지만 (발행은 사람).
 # 사용: naver_upload.sh <posts/NNN-slug/final.md> [--blog-id <blogId>(없으면 작업 폴더 .env 의 NAVER_BLOG_ID — 둘 다 없으면 exit 2)] [--category "이름"(frontmatter에 category가 없을 때의 대체값)] [--dry-run]
 # 작업 폴더(cwd)에서 실행한다 (세션 파일 playwright-state/storage_state.json 이 cwd 기준).
-# 동작: lint --stage upload → 이중 검사 → 세션·계정 확인 → create-draft-from-folder (표지 images/00-cover.png 를 대표이미지로) → list-drafts 확인.
+# 동작: lint --stage upload → 이중 검사(프로필 `마무리 블록`에 `장소카드`가 있을 때만 :::place 요구·장소 카드 경고) → 세션·계정 확인 → create-draft-from-folder (표지 images/00-cover.png 를 대표이미지로) → list-drafts 확인.
 # 종료 코드: 0 성공 | 2 사용 오류 | 10 lint 실패 | 11 이중 검사 실패 | 12 이미지 문제(표지 없음·절대경로 아님·파일 없음)
 #            20 세션 없음/만료 | 21 로그인 계정이 --blog-id 블로그에 글을 쓸 수 없음(다른 계정 세션)
 #            30 create-draft-from-folder 실패 | 31 list-drafts에서 제목 확인 불가
@@ -69,7 +69,8 @@ if mode == "precheck":
     if re.search(r"\[출처\]\(", text): bad.append("[출처]( 링크형 출처 잔존 — scripts/build_final.py 재실행")
     if re.search(r"출처\s*:", text): bad.append("출처: 잔존 — scripts/build_final.py 재실행")
     if re.search(r"!\[[^\]]+\]\(", text): bad.append("alt(캡션) 있는 이미지 — scripts/build_final.py 재실행")
-    if not re.search(r"^:::place\s+\S.*:::\s*$", text, re.M): bad.append(":::place 지시문 없음 — scripts/build_final.py 재실행")
+    if "장소카드" in os.environ.get("CLOSING_BLOCKS", "").split(",") and not re.search(r"^:::place\s+\S.*:::\s*$", text, re.M):
+        bad.append(":::place 지시문 없음 — scripts/build_final.py 재실행")
     if not re.search(r"^\*\*#", text, re.M): bad.append("**# 해시태그 줄 없음 — scripts/build_final.py 재실행")
     print("\n".join(bad)); sys.exit(11 if bad else 0)
 if err or fm is None:
@@ -131,6 +132,14 @@ $(sed 's/^/  | /' "$WORK/lint.err")"
   die 10 "lint_post.py 실패 — 업로드를 시작하지 않습니다.
 $FAILS"
 fi
+# 마무리 블록(프로필 `마무리 블록` 항목, 고정 순서) — 이중 검사의 :::place 요구와 장소 카드 경고를 `장소카드`가 있을 때만 건다.
+# build_final.closing_blocks 는 lint_post.load_closing_blocks 를 그대로 부른다(없으면 같은 계약의 로컬 폴백).
+BLOCKS="$(python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import lint_post, build_final; print(",".join(build_final.closing_blocks(lint_post.find_knowledge(sys.argv[2]))))' "$HERE" "$FINAL" 2>"$WORK/blocks.err")"; BLOCKS_RC=$?
+BLOCKS="$(nocr "$BLOCKS")"
+if [ "$BLOCKS_RC" -ne 0 ]; then
+  die 2 "프로필 마무리 블록을 읽지 못했습니다 — $(tail -n1 "$WORK/blocks.err" | tr -d '\r')"
+fi
+export CLOSING_BLOCKS="$BLOCKS"
 PRE="$(python3 -c "$PYH" "$HERE" "$FINAL" precheck "$WORK/upload-meta")"; PRE_RC=$?; PRE="$(nocr "$PRE")"
 if [ "$PRE_RC" -ne 0 ]; then
   die 11 "이중 검사 실패 — 업로드를 시작하지 않습니다.
@@ -165,7 +174,7 @@ if [ "$DRY" -eq 1 ]; then
   echo "[dry-run] tags: $TAGS"
   echo "[dry-run] 본문 줄 수: $NLINES, 이미지 수: $NIMG"
   echo "[dry-run] 표지: $COVER"
-  echo "[dry-run] 장소 지시문: $PLACE"
+  case ",$BLOCKS," in *,장소카드,*) echo "[dry-run] 장소 지시문: $PLACE" ;; esac
   log "dry-run 완료 | title=$TITLE | category=$CATEGORY | tags=$TAGS | 이미지=$NIMG"
   exit 0
 fi
@@ -237,7 +246,9 @@ elif ! { [[ "$CREATE" == *"0:표지"* ]] && [[ "$CREATE" =~ (^|[^[:alnum:]])대�
   log "경고 | 대표이미지 지정 확인 불가 (0:표지 또는 대표 지정 노트 없음)"
 fi
 PLACE_PICKED="$(printf '%s\n' "$CREATE" | python3 -c 'import re,sys; m=re.search(r"\d+:장소\((.*?)\)(?:, |\])", sys.stdin.buffer.read().decode("utf-8", "replace")); sys.stdout.write(m.group(1) if m else "")')"
-if [ -z "$PLACE_PICKED" ]; then
+if [[ ",$BLOCKS," != *,장소카드,* ]]; then
+  :   # 마무리 블록에 장소카드가 없으면 장소 노트 검사를 하지 않는다
+elif [ -z "$PLACE_PICKED" ]; then
   echo "경고: 장소 카드 확인 필요 — 장소(…) 노트 없음 또는 빈 값" >&2
   log "경고 | 장소 카드 확인 필요: 장소 노트 없음/빈 값"
 elif ! { [ -n "$BIZ" ] && [[ "$PLACE_PICKED" == *"$BIZ"* ]]; } && ! { [ -n "$PQ" ] && [[ "$PLACE_PICKED" == *"$PQ"* ]]; }; then   # business-profile.md 업체명·장소 검색어 중 하나라도 장소 이름에 있으면 통과

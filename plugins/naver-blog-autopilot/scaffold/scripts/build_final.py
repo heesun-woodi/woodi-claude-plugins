@@ -15,8 +15,10 @@
     `<직전 비어 있지 않은 줄>` → `ㅤ`(U+3164) H2_FILLER_LINES줄(사이 빈 줄 없음) → 빈 줄 1개 → `## `.
     빈 줄이 소제목에 gap을 줘 앞 문단에 이어 붙지 않게 한다. 이미 있던 빈 줄·`ㅤ` 줄은 이 배치로 다시 맞춘다(멱등).
  ⑤ image-plan `00` 행 캡션 `제목: …; 줄바꿈: 줄1; 줄2`의 제목 값(첫 `;` 앞까지)과 frontmatter title이 공백 무시로 같아야 한다.
- ⑥ 마지막 `## `이 `## 📞 문의`로 시작해야 하고(기본 헤딩 `## 📞 문의 안내`), 그 뒤에 업체소개 이미지 → `:::place 검색어:::` → 빈 줄 →
-    `**#태그 …**`(tags의 앞 `#`·공백 제거)를 붙인다. 검색어는 business-profile.md `| 장소 검색어 | … |` 행(필수 — 비면 변환 불가).
+ ⑥ 마무리 블록: business-profile.md `마무리 블록` 항목을 고정 순서(문의헤딩 → 소개이미지 → 장소카드 → 해시태그)로 조립한다.
+    `문의헤딩` → 마지막 `## `이 `## 📞`로 시작해야 한다(`## 📞 <문의 헤딩 문구>: <연락처>`; 없으면 이 검사 생략).
+    `소개이미지` → `![](<photos>/business-intro.png)`(파일 필수). `장소카드` → `:::place 검색어:::`(검색어는 `| 장소 검색어 | … |` 행 —
+    비면 변환 불가). 마지막은 항상 빈 줄 → `**#태그 …**`(tags의 앞 `#`·공백 제거). 항목에 없는 블록은 붙이지도 요구하지도 않는다.
  ⑦ 연속 빈 줄은 1개로, 파일 끝 개행 1개.
 종료 코드: 0=final.md 작성, 1=변환 불가(사유를 줄마다 출력, final.md를 쓰지 않고 이전 final.md는 지움), 2=사용 오류.
 """
@@ -31,11 +33,13 @@ for _s in (sys.stdout, sys.stderr):  # Windows 콘솔(cp949)에서도 한글·�
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 from gen_image import parse_plan  # noqa: E402
-from lint_post import find_knowledge, missing_row, parse_frontmatter, profile_row  # noqa: E402
+import lint_post  # noqa: E402
+from lint_post import find_knowledge, missing_row, parse_frontmatter, profile_list, profile_row  # noqa: E402
 
 FILLER = "ㅤ"  # 한글 채움 문자 — naver-blog-cli에서 독립 빈 문단이 된다
 H2_FILLER_LINES = 2  # 소제목 앞 ㅤ 줄 수(1줄은 문단 사이 간격과 같아 보여 2줄)
-CLOSING_H2 = "## 📞 문의"  # 마무리 헤딩(기본 `## 📞 문의 안내`)은 접두로 판정
+CLOSING_H2 = "## 📞"  # 문의 헤딩(`## 📞 <문의 헤딩 문구>: <연락처>`)은 접두로 판정
+CLOSING_ORDER = ("문의헤딩", "소개이미지", "장소카드", "해시태그")
 INTRO_IMG = "business-intro.png"
 SLOT_RE = re.compile(r"\s*!\[슬롯:[^\]]*\]\(\s*\)\s*")
 SOURCE_RE = re.compile(r"\s*\(출처:\s*https?://[^)\s]+\)")
@@ -52,6 +56,22 @@ def md_path(p):
 
 def is_filler(line):
     return line.strip() == FILLER
+
+
+def _closing_blocks(kdir):
+    """lint_post.load_closing_blocks(kdir)와 같은 계약의 로컬 폴백 — 프로필 `마무리 블록` 행을 CLOSING_ORDER 순서로.
+    빈 값이면 ValueError(missing_row), 모르는 항목이거나 해시태그가 없으면 ValueError."""
+    items = profile_list(kdir, "마무리 블록")
+    if not items:
+        raise ValueError(missing_row("마무리 블록", kdir))
+    bad = [x for x in items if x not in CLOSING_ORDER]
+    if bad or "해시태그" not in items:
+        raise ValueError("마무리 블록 값이 올바르지 않습니다: " + ", ".join(bad or ["해시태그 없음"]))
+    return [x for x in CLOSING_ORDER if x in items]
+
+
+def closing_blocks(kdir):
+    return (getattr(lint_post, "load_closing_blocks", None) or _closing_blocks)(kdir)
 
 
 def read_place_query(kdir):
@@ -201,22 +221,31 @@ def build(post_dir, photos_dir, kdir):
         errs.append("링크형 출처 [출처](URL) — lint source_format 참고: draft-v2.md "
                     + ", ".join(f"{x}행" for x in link_src))
 
-    # ⑥ 마무리 블록
-    if not h2 or not h2[-1].startswith(CLOSING_H2):
-        errs.append(f"마지막 소제목이 '{CLOSING_H2}'로 시작하지 않음 (지금: {h2[-1] if h2 else '소제목 없음'})")
+    # ⑥ 마무리 블록(프로필 `마무리 블록` 항목만, 고정 순서)
+    try:
+        blocks = closing_blocks(kdir)
+    except ValueError as e:
+        return None, None, errs + [str(e)]
     intro = os.path.join(os.path.abspath(photos_dir), INTRO_IMG)
-    if not os.path.isfile(intro):
+    place = ""
+    if "문의헤딩" in blocks and (not h2 or not h2[-1].startswith(CLOSING_H2)):
+        errs.append(f"마지막 소제목이 '{CLOSING_H2}'로 시작하지 않음 (지금: {h2[-1] if h2 else '소제목 없음'})")
+    if "소개이미지" in blocks and not os.path.isfile(intro):
         errs.append(f"업체소개 이미지 없음: {intro}")
-    place = read_place_query(kdir)
-    if not place:
-        errs.append(missing_row("장소 검색어", kdir))
+    if "장소카드" in blocks:
+        place = read_place_query(kdir)
+        if not place:
+            errs.append(missing_row("장소 검색어", kdir))
     if errs:
         return None, None, errs
 
     while out and not out[-1].strip():
         out.pop()
-    out += [f"![]({md_path(intro)})", f":::place {place}:::", "",
-            "**" + " ".join("#" + t for t in tags) + "**"]
+    if "소개이미지" in blocks:
+        out.append(f"![]({md_path(intro)})")
+    if "장소카드" in blocks:
+        out.append(f":::place {place}:::")
+    out += ["", "**" + " ".join("#" + t for t in tags) + "**"]
 
     # ⑦ 연속 빈 줄 정리(ㅤ 줄은 빈 줄이 아니므로 그대로)
     final = []

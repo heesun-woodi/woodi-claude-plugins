@@ -10,7 +10,7 @@
 - 비용 없음: API 호출 없이 로컬에서 Pillow(PIL.Image, ImageDraw, ImageFont, ImageFilter)만 쓴다.
   배경(00-bg.png)은 gen_image.py가 만든다(그쪽만 과금).
 - 설정: 전화번호 = --phone 또는 knowledge/business-profile.md `연락처` 행, 배지 업체명 = --brand 또는 `업체명` 행
-  (둘 다 비면 exit 2 — 기본값 없음), 배지 윗줄 = `배지 문구` 행(선택 — 없으면 배지를 그리지 않는다),
+  (업체명은 둘 다 비면 exit 2 — 기본값 없음. 전화번호는 --phone·`연락처` 둘 다 비면 전화 줄을 그리지 않음 — dry-run 출력 `전화: 없음`), 배지 윗줄 = `배지 문구` 행(선택 — 없으면 배지를 그리지 않는다),
   배지·제목 패널 색 = `브랜드 색` 행(선택, #RRGGBB — 없으면 중립 기본값 #2F3A45, 형식이 틀리면 exit 2).
   knowledge/는 --out 경로에서 위로 올라가며 찾는다.
 - 레이아웃: 배경 중앙 1:1 크롭 → 하단 40% 어두운 그라데이션 → 좌상단 브랜드 배지(브랜드 색)
@@ -21,7 +21,7 @@
   → /System/Library/Fonts/AppleSDGothicNeo.ttc(Bold·SemiBold) → %WINDIR%\\Fonts\\malgunbd.ttf(제목)·malgun.ttf(보조, 맑은 고딕).
   환경변수가 없으면 그 후보는 건너뛴다. 모두 없으면 추측 렌더 없이 exit 2.
   --no-system-fonts는 --font-dir 말고는 모두(사용자·시스템 글꼴 폴더) 끈다.
-종료 코드: 0=성공(또는 --dry-run), 2=사용 오류·폰트 없음·배경 없음·연락처/업체명 없음.
+종료 코드: 0=성공(또는 --dry-run), 2=사용 오류·폰트 없음·배경 없음·업체명 없음.
 """
 import argparse
 import os
@@ -187,9 +187,12 @@ def compose(bg_path, title, sub, phone, brand, size, fonts, badge="", color=BRAN
     f_phone = load(title_spec, round(size * 0.058))
     pb = size - m
     ph_h = round(size * 0.058)
-    d.text((size // 2, pb), phone, font=f_phone, fill=(255, 255, 255, 255), anchor="ms",
-           stroke_width=max(2, size // 300), stroke_fill=(0, 0, 0, 255))
-    bottom = pb - ph_h - round(size * 0.03)
+    if phone:  # 연락처가 없으면 전화 줄을 그리지 않는다
+        d.text((size // 2, pb), phone, font=f_phone, fill=(255, 255, 255, 255), anchor="ms",
+               stroke_width=max(2, size // 300), stroke_fill=(0, 0, 0, 255))
+        bottom = pb - ph_h - round(size * 0.03)
+    else:
+        bottom = pb
 
     # 보조 줄(제목 아래)
     f_sub = load(sub_spec, round(size * 0.04))
@@ -252,13 +255,13 @@ def main(argv=None):
     if not fonts:
         print(f"오류: {NO_FONT_MSG}", file=sys.stderr)
         return 2
-    if not a.dry_run:  # dry-run은 폰트·줄바꿈 계획만 출력 — 연락처·업체명이 없어도 된다
-        kdir = find_knowledge(a.out)
-        phone, brand = a.phone or profile_row(kdir, "연락처"), a.brand or profile_row(kdir, "업체명")
-        for value, row, opt in ((phone, "연락처", "--phone"), (brand, "업체명", "--brand")):
-            if not value:
-                print(f"오류: {missing_row(row, kdir)} (또는 {opt}로 지정)", file=sys.stderr)
-                return 2
+    kdir = find_knowledge(a.out)
+    phone = a.phone or profile_row(kdir, "연락처")  # 선택 — 둘 다 비면 전화 줄 생략
+    if not a.dry_run:  # dry-run은 폰트·줄바꿈 계획만 출력 — 업체명이 없어도 된다
+        brand = a.brand or profile_row(kdir, "업체명")
+        if not brand:
+            print(f"오류: {missing_row('업체명', kdir)} (또는 --brand로 지정)", file=sys.stderr)
+            return 2
         badge = profile_row(kdir, "배지 문구")  # 선택 — 비면 배지를 그리지 않는다
         hexcolor = profile_row(kdir, "브랜드 색")  # 선택 — #RRGGBB, 비면 BRAND
         if hexcolor and not re.fullmatch(r"#[0-9A-Fa-f]{6}", hexcolor):
@@ -270,6 +273,7 @@ def main(argv=None):
         if a.dry_run:
             print(f"제목 폰트: {fonts[0][0]} (index {fonts[0][1]}) · 보조 폰트: {fonts[1][0]} (index {fonts[1][1]})")
             print(f"글자 크기: {px}px · 줄 {len(lines)}개")
+            print(f"전화: {phone or '없음'}")
             for i, ln in enumerate(lines, 1):
                 print(f"  {i}: {ln} ({text_w(font, ln):.0f}px)")
             print(f"출력: {a.out} ({a.size}x{a.size})\n(dry-run) 파일을 쓰지 않았습니다.")

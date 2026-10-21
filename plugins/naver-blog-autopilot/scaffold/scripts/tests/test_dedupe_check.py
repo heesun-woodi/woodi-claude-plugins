@@ -1,4 +1,6 @@
+import json
 import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -19,9 +21,12 @@ POSTS = [
 ]
 
 
+SCRIPT = os.path.join(os.path.dirname(HERE), "dedupe_check.py")
+EMPTY_PROFILE = ("| 항목 | 내용 |\n|---|---|\n| 고객 지역 | |\n| 업체 유형어 | [쉼표 목록] |\n| 업종 일반어 | |\n")
+
+
 class DedupeTest(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
+    def setUp(self):  # 모듈 전역(REGIONS 등)을 매 테스트 PROFILE로 되돌린다
         with tempfile.TemporaryDirectory() as d:
             with open(os.path.join(d, "business-profile.md"), "w", encoding="utf-8") as f:
                 f.write(PROFILE)
@@ -63,6 +68,40 @@ class DedupeTest(unittest.TestCase):
         for notice in (False, True):
             self.assertEqual(dedupe_check.judge("예시상회 10월 체험단 모집", "체험단 일정", [], notice=notice),
                              (0.0, 0, "×", "", ""))
+
+    def test_empty_region_kind_generic_rows_give_empty_lists(self):
+        with tempfile.TemporaryDirectory() as d:
+            with open(os.path.join(d, "business-profile.md"), "w", encoding="utf-8") as f:
+                f.write(EMPTY_PROFILE)
+            dedupe_check.load_profile(d)  # ValueError 아님
+        self.assertEqual((dedupe_check.REGIONS, dedupe_check.STRIP, dedupe_check.GENERIC), ([], [], set()))
+        j, core, lab, title, _ = dedupe_check.judge("리본 고르기와 포장 요령", "리본", POSTS)
+        self.assertEqual(lab, "○")
+
+    def test_load_profile_still_stops_without_profile_file(self):
+        with tempfile.TemporaryDirectory() as d:
+            with self.assertRaises(ValueError):
+                dedupe_check.load_profile(d)
+            with self.assertRaises(ValueError):
+                dedupe_check.load_profile(None)
+
+    def test_cli_empty_rows_exit_0_and_no_profile_exit_2(self):
+        with tempfile.TemporaryDirectory() as d:
+            kd = os.path.join(d, "knowledge")
+            os.makedirs(os.path.join(d, "work"))
+            posts = os.path.join(d, "work", "own-posts.json")
+            with open(posts, "w", encoding="utf-8") as f:
+                json.dump(POSTS, f, ensure_ascii=False)
+            run = lambda: subprocess.run([sys.executable, SCRIPT, "리본 고르기와 포장 요령", "리본", posts],
+                                         capture_output=True, text=True, encoding="utf-8")
+            r = run()  # knowledge/ 없음
+            self.assertEqual(r.returncode, 2, r.stderr)
+            os.makedirs(kd)
+            with open(os.path.join(kd, "business-profile.md"), "w", encoding="utf-8") as f:
+                f.write(EMPTY_PROFILE)
+            r = run()
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertTrue(r.stdout.startswith("○"))
 
 
 if __name__ == "__main__":

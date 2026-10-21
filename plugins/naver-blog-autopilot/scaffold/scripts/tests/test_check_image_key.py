@@ -150,5 +150,73 @@ class CheckImageKeyTest(unittest.TestCase):
         self.assertIn("HTTP 500", text)
 
 
+FAKE_PEXELS = "PexelsFAKEKEY563f2b8c0a9e4d71b6c5a0f9e8d7c6b5a4f3e2d1c0b9a8"
+
+
+class CheckStockKeyTest(unittest.TestCase):
+    """--stock: PEXELS_API_KEY만 확인(이미지 생성 키 경로와 섞이지 않음)."""
+
+    setUp = CheckImageKeyTest.setUp
+    tearDown = CheckImageKeyTest.tearDown
+    run_check = CheckImageKeyTest.run_check
+
+    def assert_no_pexels_key(self, text):
+        self.assertNotIn(FAKE_PEXELS, text)
+
+    def test_stock_ok_header_and_url(self):
+        rc, text, seen = self.run_check(f"GEMINI_API_KEY={FAKE_GEMINI}\nPEXELS_API_KEY={FAKE_PEXELS}\n", argv=["--stock"])
+        self.assertEqual(rc, 0)
+        self.assertEqual(len(seen), 1)  # Pexels만 확인 — Gemini 조회 없음
+        req = seen[0]
+        self.assertEqual(req.full_url, "https://api.pexels.com/v1/search?query=test&per_page=1")
+        self.assertEqual(req.get_method(), "GET")
+        self.assertEqual(req.get_header("Authorization"), FAKE_PEXELS)
+        self.assertIn("스톡 키 확인: pexels 사용 가능 (", text)
+        self.assert_no_pexels_key(text)
+
+    def test_stock_env_var_source(self):
+        out = io.StringIO()
+        with mock.patch.dict(os.environ, {"PEXELS_API_KEY": FAKE_PEXELS}, clear=True), \
+                mock.patch("urllib.request.urlopen", lambda req, timeout=None: FakeResp()), \
+                contextlib.redirect_stdout(out):
+            rc = check_image_key.main(["--stock"])
+        self.assertEqual(rc, 0)
+        self.assertEqual(out.getvalue().strip(), "스톡 키 확인: pexels 사용 가능 (환경변수)")
+
+    def test_stock_exit_2_no_key_and_conflicts(self):
+        rc, text, seen = self.run_check(f"GEMINI_API_KEY={FAKE_GEMINI}\n", argv=["--stock"])
+        self.assertEqual((rc, seen), (2, []))
+        self.assertIn("스톡 키 없음 — .env에 PEXELS_API_KEY=…", text)
+        self.assertIn("https://www.pexels.com/api/", text)
+        rc, _, seen = self.run_check(f"PEXELS_API_KEY={FAKE_PEXELS}\n", argv=["--stock", "--provider", "openai"])
+        self.assertEqual((rc, seen), (2, []))
+        rc, _, seen = self.run_check(argv=["--stock", "--env", os.path.join(self.tmp.name, "nope.env")])
+        self.assertEqual((rc, seen), (2, []))
+
+    def test_stock_exit_3_rejected(self):
+        for status in (401, 403):
+            rc, text, _ = self.run_check(f"PEXELS_API_KEY={FAKE_PEXELS}\n", lambda r, t: (_ for _ in ()).throw(
+                http_error(status, {"error": f"bad key {FAKE_PEXELS}"})), argv=["--stock"])
+            self.assertEqual(rc, 3)
+            self.assertIn(f"스톡 키 거부: Pexels {status}", text)
+            self.assert_no_pexels_key(text)
+
+    def test_stock_exit_5_network_and_429(self):
+        rc, text, _ = self.run_check(f"PEXELS_API_KEY={FAKE_PEXELS}\n", lambda r, t: (_ for _ in ()).throw(
+            urllib.error.URLError(f"no route {FAKE_PEXELS}")), argv=["--stock"])
+        self.assertEqual(rc, 5)
+        self.assertIn("네트워크", text)
+        self.assert_no_pexels_key(text)
+        rc, text, _ = self.run_check(f"PEXELS_API_KEY={FAKE_PEXELS}\n", lambda r, t: (_ for _ in ()).throw(
+            http_error(429, {"error": "rate limit"})), argv=["--stock"])
+        self.assertEqual(rc, 5)
+        self.assertIn("HTTP 429", text)
+
+    def test_without_stock_flag_ignores_pexels(self):
+        rc, text, seen = self.run_check(f"PEXELS_API_KEY={FAKE_PEXELS}\n")
+        self.assertEqual((rc, seen), (2, []))  # 1.0.0 동작: 이미지 생성 키 없음
+        self.assertIn("이미지 키 없음", text)
+
+
 if __name__ == "__main__":
     unittest.main()

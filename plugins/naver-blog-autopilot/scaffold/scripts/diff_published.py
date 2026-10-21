@@ -13,7 +13,7 @@
   paragraphs{removed,added,changed:[{before,after,ratio}]}(difflib, 각 최대 20개, 문장은 200자에서 자름) ·
   tone{before:{합니다,해요}, after:{...}}(문장 끝 수, 허용 의문문 제외) · length{before,after}(공백 제외 글자수) ·
   images{before,after}(before = final.md 이미지 + 글 폴더 images/00-cover.png가 있으면 표지 1장 — 업로드 도구가 맨 앞에 넣음) ·
-  closing_block_kept(발행본에 `📞 문의` 줄이 있고 그 뒤에 해시태그 줄이 있음) · summary(사람용 한국어 3~6줄).
+  closing_block_kept(발행본에 `📞` 줄이 있고 그 뒤에 해시태그 줄이 있음; 프로필 `마무리 블록`에 `문의헤딩`이 없으면 null=해당 없음) · summary(사람용 한국어 3~6줄).
 종료 코드: 0=비교 완료, 2=사용 오류(파일 없음·읽기 실패·JSON이 객체가 아님).
 """
 import argparse
@@ -29,7 +29,7 @@ for _s in (sys.stdout, sys.stderr):  # Windows 콘솔(cp949)에서도 한글·�
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 from lint_post import (HTMLC_RE, IMG_RE, Q_OK, SENT_SPLIT_RE, TRAIL_RE, haeyo_end,  # noqa: E402
-                       is_hashtag_line, parse_frontmatter)
+                       find_knowledge, is_hashtag_line, load_closing_blocks, parse_frontmatter)
 
 MAX_ITEMS, MAX_LEN = 20, 200
 CHANGED_MIN = 0.5  # 이 비율 이상 닮은 문단 쌍은 "수정", 아래면 삭제+추가
@@ -40,7 +40,7 @@ TABLE_SEP_RE = re.compile(r"^\s*\|[\s:|-]+\|\s*$")
 LINK_RE = re.compile(r"\[([^\]]*)\]\([^)]*\)")
 LIST_RE = re.compile(r"^\s*(?:[-*+]\s+|\d+[.)]\s+|>\s*)+")
 FENCE_JSON_RE = re.compile(r"^\s*```json\s*\n(.*?)\n```\s*\n?", re.S)
-CONTACT = "📞 문의"
+CONTACT = "📞"
 
 
 def read(path):
@@ -180,7 +180,15 @@ def count_images(md):
     return len(IMG_RE.findall(HTMLC_RE.sub("", md)))
 
 
-def compare(final_path, published_path):
+def closing_applicable(final_path, knowledge=None):
+    """프로필 `마무리 블록`에 `문의헤딩`이 있으면 True, 없으면 False(비교 대상 아님). 프로필을 못 읽으면 True(현행 동작)."""
+    try:
+        return "문의헤딩" in load_closing_blocks(knowledge or find_knowledge(final_path))
+    except (ValueError, OSError):
+        return True
+
+
+def compare(final_path, published_path, knowledge=None):
     t_before, body_before = load_final(final_path)
     t_after, body_after, pub_images = load_published(published_path)
     hb, pb, _ = split_doc(body_before)
@@ -206,7 +214,7 @@ def compare(final_path, published_path):
         "length": {"before": chars(hb, pb), "after": chars(ha, pa)},
         "images": {"before": count_images(body_before) + (1 if cover else 0),
                    "after": pub_images if isinstance(pub_images, int) else count_images(body_after)},
-        "closing_block_kept": closing_kept(raw_a),
+        "closing_block_kept": closing_kept(raw_a) if closing_applicable(final_path, knowledge) else None,
     }
     counts = {"h": (len(h_added), len(h_removed), len(h_changed)),
               "p": (len(p_removed), len(p_added), len(p_changed))}
@@ -235,8 +243,8 @@ def summarize(r, counts):
     if ta["해요"] > tb["해요"]:
         tone += " — 해요체가 늘었습니다"
     lines.append(tone)
-    lines.append(f"이미지: {r['images']['before']}장 → {r['images']['after']}장 · 마무리 블록(📞 문의→해시태그): "
-                 + ("유지" if r["closing_block_kept"] else "발행본에서 찾지 못함"))
+    lines.append(f"이미지: {r['images']['before']}장 → {r['images']['after']}장 · 마무리 블록(📞→해시태그): "
+                 + ("해당 없음" if r["closing_block_kept"] is None else "유지" if r["closing_block_kept"] else "발행본에서 찾지 못함"))
     return "\n".join(lines)
 
 
@@ -245,6 +253,8 @@ def main(argv=None):
                                  epilog="종료 코드: 0=비교 완료, 2=사용 오류(파일 없음·읽기 실패)")
     ap.add_argument("final", help="업로드본 final.md")
     ap.add_argument("published", help="발행본: fetch_post.py --json 출력(.json) 또는 마크다운(.md)")
+    ap.add_argument("--knowledge", metavar="DIR", help="knowledge 폴더(기본: final.md에서 위로 올라가며 knowledge/ 탐색). "
+                    "프로필 `마무리 블록`에 `문의헤딩`이 없으면 closing_block_kept는 null(해당 없음)")
     ap.add_argument("--json", action="store_true", help="JSON만 출력")
     try:
         a = ap.parse_args(argv)
@@ -255,7 +265,7 @@ def main(argv=None):
             print(f"오류: 파일을 찾을 수 없습니다: {p}", file=sys.stderr)
             return 2
     try:
-        res = compare(a.final, a.published)
+        res = compare(a.final, a.published, a.knowledge)
     except (ValueError, UnicodeDecodeError) as e:
         print(f"오류: {e}", file=sys.stderr)
         return 2

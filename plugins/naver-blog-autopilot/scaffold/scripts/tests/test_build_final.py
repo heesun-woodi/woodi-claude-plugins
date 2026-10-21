@@ -14,8 +14,13 @@ import build_final  # noqa: E402
 
 F = "ㅤ"
 TITLE = "가나동 선물 포장 순서와 준비물"
+def profile(blocks="문의헤딩, 소개이미지, 장소카드, 해시태그", place="예시상회 가나동"):
+    return ("# 업체 기본정보\n\n| 항목 | 내용 |\n|---|---|\n| 업체명 | 예시상회 |\n"
+            f"| 장소 검색어 | {place} |\n| 마무리 블록 | {blocks} |\n")
+
+
 PROFILE = ("# 업체 기본정보\n\n| 항목 | 내용 |\n|---|---|\n| 업체명 | 예시상회 |\n"
-           "| 장소 검색어 | 예시상회 가나동 |\n")
+           "| 장소 검색어 | 예시상회 가나동 |\n| 마무리 블록 | 문의헤딩, 소개이미지, 장소카드, 해시태그 |\n")
 HEAD = "| 슬롯 | 위치(소제목) | 목적 | 유형 | 프롬프트(ai) / 후보 파일(photo) | 캡션(alt) | 파일 | 검수 |\n|---|---|---|---|---|---|---|---|\n"
 
 
@@ -164,7 +169,7 @@ class BuildFinalTest(unittest.TestCase):
 
     def test_place_required_without_profile_row(self):
         # 장소 검색어 행이 없으면 기본값 없이 변환 불가(조용한 기본값 금지)
-        self.write("knowledge/business-profile.md", "# 업체 기본정보\n\n| 항목 | 내용 |\n|---|---|\n| 장소 검색어 | [장소 검색어] |\n")
+        self.write("knowledge/business-profile.md", profile(place="[장소 검색어]"))
         self.assertFails("`장소 검색어` 행이 비어 있습니다")
 
     # --- ④ 여백 ---
@@ -316,7 +321,7 @@ class BuildFinalTest(unittest.TestCase):
 
     def test_last_h2_not_contact_fails(self):
         self.draft = DRAFT + "\n## 5️⃣ 덧붙임\n문단입니다.\n"
-        self.assertFails("마지막 소제목이 '## 📞 문의'로 시작하지 않음")
+        self.assertFails("마지막 소제목이 '## 📞'로 시작하지 않음")
 
     def test_missing_intro_image_fails(self):
         os.remove(os.path.join(self.root, "photos", "business-intro.png"))
@@ -331,6 +336,88 @@ class BuildFinalTest(unittest.TestCase):
         self.assertEqual(p.returncode, 0, p.stderr)
         self.assertIn(f"![]({alt}/yard.jpg)", text)
         self.assertIn(f"![]({alt}/business-intro.png)", text)
+
+    # --- ⑥ 마무리 블록 조합(프로필 `마무리 블록`) ---
+    NO_CONTACT = "## 5️⃣ 마무리\n마무리 문단입니다.\n"
+
+    def build_with(self, blocks, place="예시상회 가나동", no_contact=False, intro=True):
+        self.write("knowledge/business-profile.md", profile(blocks, place))
+        if no_contact:
+            self.draft = DRAFT.replace("## 📞 문의 안내: 000-0000-0000\n", self.NO_CONTACT)
+        if not intro:
+            os.remove(os.path.join(self.root, "photos", "business-intro.png"))
+        return self.run_build()
+
+    def test_closing_all_four(self):
+        p, text = self.build_with("해시태그, 장소카드, 소개이미지, 문의헤딩")  # 적힌 순서와 무관하게 고정 순서
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual(text.splitlines()[-5:], [
+            "## 📞 문의 안내: 000-0000-0000", f"![]({self.root}/photos/business-intro.png)",
+            ":::place 예시상회 가나동:::", "", "**#선물포장 #가나동선물 #포장준비물**"])
+
+    def test_closing_inquiry_and_hashtag_only(self):
+        p, text = self.build_with("문의헤딩, 해시태그", place="", intro=False)  # 장소 검색어·소개 이미지 없어도 통과
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual(text.splitlines()[-3:], ["## 📞 문의 안내: 000-0000-0000", "", "**#선물포장 #가나동선물 #포장준비물**"])
+        self.assertNotIn(":::place", text)
+        self.assertNotIn("business-intro.png", text)
+
+    def test_closing_hashtag_only_personal(self):
+        p, text = self.build_with("해시태그", place="", no_contact=True, intro=False)
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual(text.splitlines()[-3:], ["마무리 문단입니다.", "", "**#선물포장 #가나동선물 #포장준비물**"])
+        self.assertNotIn(":::place", text)
+        self.assertNotIn("business-intro.png", text)
+
+    def test_closing_intro_image_without_place(self):
+        p, text = self.build_with("소개이미지, 해시태그", place="", no_contact=True)
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual(text.splitlines()[-4:], ["마무리 문단입니다.", f"![]({self.root}/photos/business-intro.png)", "",
+                                                  "**#선물포장 #가나동선물 #포장준비물**"])
+
+    def test_closing_place_without_inquiry_or_intro(self):
+        p, text = self.build_with("장소카드, 해시태그", no_contact=True, intro=False)
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual(text.splitlines()[-4:], ["마무리 문단입니다.", ":::place 예시상회 가나동:::", "",
+                                                  "**#선물포장 #가나동선물 #포장준비물**"])
+
+    def test_no_inquiry_skips_last_h2_check(self):
+        p, _ = self.build_with("해시태그", place="", no_contact=True, intro=False)
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.build_with("문의헤딩, 해시태그", no_contact=True)  # 문의헤딩이 있으면 현행 오류
+        self.assertFails("마지막 소제목이 '## 📞'로 시작하지 않음")
+
+    def test_empty_place_ok_without_place_card(self):
+        p, _ = self.build_with("문의헤딩, 소개이미지, 해시태그", place="")
+        self.assertEqual(p.returncode, 0, p.stderr)
+
+    def test_place_card_requires_place_query(self):
+        self.write("knowledge/business-profile.md", profile("장소카드, 해시태그", place=""))
+        self.assertFails("`장소 검색어` 행이 비어 있습니다")
+
+    def test_intro_image_missing_only_matters_with_intro_block(self):
+        self.build_with("소개이미지, 해시태그", place="", no_contact=True, intro=False)
+        self.assertFails("업체소개 이미지 없음")
+
+    def test_closing_blocks_row_required_and_validated(self):
+        self.write("knowledge/business-profile.md", "# 업체 기본정보\n\n| 항목 | 내용 |\n|---|---|\n| 업체명 | 예시상회 |\n")
+        self.assertFails("`마무리 블록` 행이 비어 있습니다")
+        self.write("knowledge/business-profile.md", profile("문의헤딩, 소개이미지"))
+        self.assertFails("마무리 블록 값이 올바르지 않습니다: 해시태그 없음")
+
+    def test_local_fallback_matches_contract(self):
+        with tempfile.TemporaryDirectory() as t:
+            k = os.path.join(t, "knowledge")
+            os.makedirs(k)
+            with open(os.path.join(k, "business-profile.md"), "w", encoding="utf-8") as f:
+                f.write(profile("해시태그, 문의헤딩"))
+            self.assertEqual(build_final._closing_blocks(k), ["문의헤딩", "해시태그"])
+            with mock.patch.object(build_final.lint_post, "load_closing_blocks", lambda kd: ["해시태그"], create=True):
+                self.assertEqual(build_final.closing_blocks(k), ["해시태그"])  # lint_post 헬퍼가 있으면 그것을 씀
+            with open(os.path.join(k, "business-profile.md"), "w", encoding="utf-8") as f:
+                f.write(profile("문의헤딩, 바나나, 해시태그"))
+            with self.assertRaises(ValueError):
+                build_final._closing_blocks(k)
 
     def test_usage_error(self):
         p = subprocess.run([sys.executable, SCRIPT, os.path.join(self.root, "nope")],

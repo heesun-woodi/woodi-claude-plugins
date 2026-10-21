@@ -55,6 +55,115 @@ class CoverRowTest(unittest.TestCase):
                 self.assertEqual(f.read(), COVER_PLAN)
 
 
+STOCK_PLAN = """| 슬롯 | 위치(소제목) | 목적 | 유형 | 프롬프트(ai) / 검색어(stock) / 후보 파일(photo) | 캡션(alt) | 파일 | 검수 | 출처 |
+|---|---|---|---|---|---|---|---|---|
+| 01 | ## 1 | 현장 | ai | gift box on a table | 상자 | | | |
+| 02 | ## 2 | 현장 | stock | bicycle chain cleaning closeup | 체인 | | | |
+| 03 | ## 3 | 업체 CTA | photo | photos/a.jpg | 매장 | | | |
+"""
+
+
+class SceneAndStockTest(unittest.TestCase):
+    def test_default_scene_prefix(self):
+        self.assertEqual(gen_image.DEFAULT_SCENE, "Korean everyday scene")
+        self.assertTrue(gen_image.PROMPT_PREFIX.startswith("photorealistic, Korean everyday scene, no text"))
+        p = gen_image.build_prompt("gift box on a table.")
+        self.assertEqual(p, f"{gen_image.PROMPT_PREFIX}. gift box on a table. {gen_image.PROMPT_SUFFIX}.")
+        self.assertEqual(gen_image.build_prompt("x", None), gen_image.build_prompt("x", ""))
+
+    def test_profile_scene_replaces_only_scene_phrase(self):
+        p = gen_image.build_prompt("gift box", "Korean neighborhood bicycle repair shop")
+        self.assertTrue(p.startswith("photorealistic, Korean neighborhood bicycle repair shop, no text, no letters, "
+                                     "no watermark, no close-up faces. gift box. natural light"), p)
+        self.assertNotIn("Korean everyday scene", p)
+
+    def test_load_base_scene_from_profile(self):
+        with tempfile.TemporaryDirectory() as d:
+            k = os.path.join(d, "knowledge")
+            os.makedirs(k)
+            self.assertEqual(gen_image.load_base_scene(k), "")  # 파일 없음
+            self.assertEqual(gen_image.load_base_scene(None), "")
+            prof = os.path.join(k, "business-profile.md")
+            with open(prof, "w", encoding="utf-8") as f:
+                f.write("| 항목 | 내용 |\n|---|---|\n| 이미지 기본 장면 | Korean neighborhood bicycle repair shop |\n")
+            self.assertEqual(gen_image.load_base_scene(k), "Korean neighborhood bicycle repair shop")
+            with open(prof, "w", encoding="utf-8") as f:
+                f.write("| 항목 | 내용 |\n|---|---|\n| 이미지 기본 장면 | |\n")
+            self.assertEqual(gen_image.load_base_scene(k), "")
+
+    def _dry(self, profile_text=None, extra=()):
+        with tempfile.TemporaryDirectory() as d:
+            if profile_text is not None:
+                os.makedirs(os.path.join(d, "knowledge"))
+                with open(os.path.join(d, "knowledge", "business-profile.md"), "w", encoding="utf-8") as f:
+                    f.write(profile_text)
+            plan = os.path.join(d, "work", "posts", "001", "images", "image-plan.md")
+            os.makedirs(os.path.dirname(plan))
+            with open(plan, "w", encoding="utf-8") as f:
+                f.write(STOCK_PLAN)
+            out, err = io.StringIO(), io.StringIO()
+            with mock.patch.dict(os.environ, {}, clear=True), contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                cwd = os.getcwd()
+                os.chdir(d)
+                try:
+                    rc = gen_image.main([plan, "--dry-run", *extra])
+                finally:
+                    os.chdir(cwd)
+            return rc, out.getvalue(), err.getvalue()
+
+    def test_dry_run_uses_profile_scene(self):
+        rc, out, _ = self._dry("| 항목 | 내용 |\n|---|---|\n| 이미지 기본 장면 | Korean home office desk |\n")
+        self.assertEqual(rc, 0)
+        self.assertIn("프롬프트: photorealistic, Korean home office desk, no text", out)
+
+    def test_dry_run_default_scene_without_profile(self):
+        rc, out, _ = self._dry(None)
+        self.assertEqual(rc, 0)
+        self.assertIn("프롬프트: photorealistic, Korean everyday scene, no text", out)
+
+    def test_knowledge_option(self):
+        with tempfile.TemporaryDirectory() as k:
+            with open(os.path.join(k, "business-profile.md"), "w", encoding="utf-8") as f:
+                f.write("| 항목 | 내용 |\n|---|---|\n| 이미지 기본 장면 | Korean cafe interior |\n")
+            rc, out, _ = self._dry(None, ["--knowledge", k])
+            self.assertEqual(rc, 0)
+            self.assertIn("photorealistic, Korean cafe interior, no text", out)
+
+    def test_stock_row_skipped_without_warning(self):
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            _, rows = gen_image.parse_plan(STOCK_PLAN)
+        self.assertEqual(err.getvalue(), "")
+        self.assertIn("stock", gen_image.KINDS)
+        self.assertEqual([r["kind"] for r in rows], ["ai", "stock", "photo"])
+        self.assertEqual([r["slot"] for r in gen_image.select_ai_rows(rows)], ["01"])  # stock은 ai로 보지 않음
+        with self.assertRaises(ValueError):
+            gen_image.select_ai_rows(rows, gen_image.parse_only("02"))
+
+    def test_dry_run_counts_stock_and_targets_only_ai(self):
+        rc, out, err = self._dry(None)
+        self.assertEqual(rc, 0)
+        self.assertIn("슬롯 3개 (ai 1, photo 1, stock 1) → 이번 대상 ai 1개", out)
+        self.assertNotIn("bicycle chain", out)
+        self.assertNotIn("경고", err)
+
+    def test_pexels_key_name_read_but_provider_unchanged(self):
+        self.assertIn("PEXELS_API_KEY", gen_image.ENV_NAMES)
+        self.assertNotIn("PEXELS_API_KEY", gen_image.KEY_NAMES.values())
+        with tempfile.TemporaryDirectory() as d:
+            env = os.path.join(d, ".env")
+            with open(env, "w", encoding="utf-8") as f:
+                f.write("PEXELS_API_KEY=pexels-fake-value\nOPENAI_API_KEY=sk-fake-openai-value-1234\n")
+            vals = gen_image.read_env_values(env)
+            self.assertEqual(vals["PEXELS_API_KEY"], "pexels-fake-value")
+            provider, _, _, _ = gen_image.resolve_provider(gen_image.find_env(None, env))
+            self.assertEqual(provider, "openai")
+            with open(env, "w", encoding="utf-8") as f:
+                f.write("PEXELS_API_KEY=pexels-fake-value\n")
+            with mock.patch.dict(os.environ, {}, clear=True):
+                self.assertEqual(gen_image.resolve_provider(gen_image.find_env(None, env))[0], None)  # Pexels 키만으로는 제공자 없음
+
+
 class GenImagePlanTest(unittest.TestCase):
     def test_parse_splits_ai_and_photo_and_only_filter(self):
         idx, rows = gen_image.parse_plan(PLAN)
