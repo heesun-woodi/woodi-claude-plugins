@@ -635,6 +635,23 @@ class OpenverseTest(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertIn("[OK] 03", out)
 
+    def test_unsafe_download_urls_skipped(self):
+        bad = ["file:///etc/passwd", "ftp://example.com/p.jpg", "http://127.0.0.1/p.jpg", "http://192.168.0.1/p.jpg", "http://169.254.169.254/p.jpg"]
+        results = {"laptop wooden desk": [ov_result(i + 1, url=u) for i, u in enumerate(bad)]}
+
+        def fn(req):
+            if req.full_url.startswith(fetch_stock.OPENVERSE_URL):
+                return FakeResp(ov_body(results["laptop wooden desk"]))
+            raise AssertionError("unsafe url opened: " + req.full_url)
+        rc, out, _, seen = self.run_main([self.post, "--only", "3"], fn)
+        self.assertEqual(rc, 0)
+        self.assertEqual(len(self.downloads(seen)), 0)
+        self.assertIn("사진 받기 실패", self.read_plan())
+
+    def test_check_download_url_allows_public(self):
+        fetch_stock.check_download_url("https://live.staticflickr.com/1/p.jpg")
+        fetch_stock.check_download_url("http://93.184.216.34/p.jpg")
+
     def test_read_exceptions_skip_candidate(self):
         results = {"laptop wooden desk": [ov_result(1), ov_result(2), ov_result(3)]}
 

@@ -38,6 +38,7 @@
 import argparse
 import glob
 import http.client
+import ipaddress
 import json
 import os
 import re
@@ -306,11 +307,26 @@ def openverse_search(query):
     return data if isinstance(data, dict) else {}
 
 
+def check_download_url(url):
+    """사진 주소는 Openverse가 외부 사이트에서 모은 값이라 그대로 믿지 않는다.
+    http·https만 허용하고, 루프백·사설·링크로컬 IP를 직접 적은 주소는 거부한다(ValueError — 호출부가 그 후보만 건너뜀)."""
+    parts = urllib.parse.urlsplit(url)
+    if parts.scheme not in ("http", "https") or not parts.hostname:
+        raise ValueError("허용하지 않는 사진 주소 형식")
+    try:
+        ip = ipaddress.ip_address(parts.hostname)
+    except ValueError:
+        return
+    if ip.is_loopback or ip.is_private or ip.is_link_local or ip.is_reserved or ip.is_unspecified or ip.is_multicast:
+        raise ValueError("허용하지 않는 사진 주소(내부 IP)")
+
+
 def openverse_download(url):
     """bytes, 또는 건너뛸 후보면 None(Content-Type이 다른 형식 · 크기 OV_MAX_BYTES 초과 · 매직 바이트 불일치).
     jpeg/png 헤더면 통과, 헤더가 없거나 OV_AMBIGUOUS면 받은 뒤 매직 바이트(JPEG FFD8FF · PNG 89504E47)로 판정.
     헤더만 보고 거르면 본문은 읽지 않는다. Content-Length가 숫자인데 받은 합계와 다르면 IncompleteRead.
     오류는 urllib/http.client 예외 그대로(호출부가 후보만 건너뜀)."""
+    check_download_url(url)
     req = urllib.request.Request(url, headers={"User-Agent": openverse_ua()})
     with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
         ctype = (resp.headers.get("Content-Type") or "").split(";")[0].strip().lower()
