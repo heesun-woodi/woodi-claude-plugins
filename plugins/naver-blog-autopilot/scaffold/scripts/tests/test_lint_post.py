@@ -890,6 +890,7 @@ class LintProfileV11Test(unittest.TestCase):
         rl = self.by_id(self.run_lint(self.no_links()))["related_links"]
         self.assertEqual(rl["result"], "FAIL")
         self.assertIn("related: none", rl["detail"])
+        self.assertIn("담당자가 고른 글은 남긴다", rl["detail"])  # 사람이 고른 링크를 지우라고 하지 않는다
 
     def test_related_none_with_links_still_passes(self):
         self.set_own_posts(6)  # 링크 2개가 있으면 표시와 무관하게 PASS

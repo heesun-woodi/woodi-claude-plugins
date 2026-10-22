@@ -583,8 +583,8 @@ def lint_text(text, stage, th, forbidden, regions=None, post_dir=None, learned_a
         elif rl == "WARN":
             rule, detail = f"{RELATED_NONE} — 주제에 맞는 자기 글 2편 미만(writer 판단)", f"자기 글 {own_posts}편, 관련글 {own}개"
         elif slots == 0:  # 자기 글 2편 이상인데 링크가 모자람 — 고치는 길을 알려 준다
-            detail = (f"관련글 {own}개 — 주제에 맞는 자기 글이 2편 미만이면 관련글 링크를 모두 지우고 "
-                      f"frontmatter에 `{RELATED_NONE}`을 쓴다")
+            detail = (f"관련글 {own}개 — 관련글이 2개 미만이면 frontmatter에 `{RELATED_NONE}`을 쓴다"
+                      "(주제에 맞는 글이 없을 때만 링크를 지우고, 담당자가 고른 글은 남긴다)")
         c.append(check("related_links", f"[[ {slots}건, 관련글 {own}개", rule, rl, detail))
         bad, notes = [], []
         for cap, path in all_images:

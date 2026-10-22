@@ -87,7 +87,7 @@ fi
 `blogId, logNo, title, chars, paragraphs, headings, images, bold_runs, bold_lines, quotes, links_out, links_naver_blog, oglinks`.
 (`headings`는 fs24/fs19 글씨 또는 sectionTitle 문단만 센다 — 굵은 줄로 만든 소제목은 `bold_lines`에 들어간다. 3단계에서 보정한다.)
 
-- 레퍼런스: `design_references`(`own-style` 제외) → `work/design-system/ref-<n>-<blogId>.json`(원본 JSON)과 `ref-<n>-<blogId>.md`(markdown만). 실행할 때 기존 `ref-*` 파일은 `work/design-system/_prev/`로 옮겨 재사용 후보로만 쓴다 — 그래서 `work/design-system/`의 `ref-*`는 **이번 `design_references`의 글만** 남고(빠진 레퍼런스는 측정표·중앙값에 들어가지 않는다), 순서가 바뀌어도 서로 덮어쓰지 않는다. `own-style` 레퍼런스 0 → `own-<logNo>.{json,md}`(최신 10편에 없어도 측정).
+- 레퍼런스: `design_references`(`own-style` 제외) → `work/design-system/ref-<n>-<blogId>.json`(원본 JSON)과 `ref-<n>-<blogId>.md`(markdown만). 실행할 때 기존 `ref-*`(자기 글을 측정하는 실행이면 `own-*`도) 파일은 `work/design-system/_prev/`로 옮겨 재사용 후보로만 쓴다 — 그래서 `work/design-system/`에는 **이번 측정 대상 글만** 남고(지난 실행의 최신 10편 밖 글도 자기 글 행에 섞이지 않는다)(빠진 레퍼런스는 측정표·중앙값에 들어가지 않는다), 순서가 바뀌어도 서로 덮어쓰지 않는다. `own-style` 레퍼런스 0 → `own-<logNo>.{json,md}`(최신 10편에 없어도 측정).
 - 자기 블로그(★ 경로가 아닐 때만): `python3 scripts/fetch_posts.py --rss <own_blog.blogId>`에서 `category == own_blog.categories.info`인 글을(`categories.info`가 비어 있으면 카테고리로 거르지 않는다)
   `date` 내림차순 **최신 10개** → 각각 fetch_post → `work/design-system/own-<logNo>.json`, `own-<logNo>.md`.
   RSS에 해당 카테고리 글이 10개 미만이면 `python3 scripts/fetch_posts.py --all <own_blog.blogId>`로 다시 걸러 채운다(`--all` 목록은 `category`가 빌 수 있다 — 빈 글은 카테고리를 알 수 없어 채우지 않는다). 그래도 모자라면 있는 만큼만 쓰고 개수를 보고에 적는다.
@@ -130,14 +130,14 @@ if want_own:  # 레퍼런스 0(own-style)은 최신 10편 밖이어도 측정
     jobs += [(r["blogId"], r["logNo"], f"own-{r['logNo']}") for r in src.get("design_references", [])
              if r.get("role") == "own-style" and r["logNo"] not in {p["logNo"] for p in mine}]
 
-PREV = f"{D}/_prev"  # 지난 ref-* 파일 보관 — 번호가 바뀌어도 다른 레퍼런스 파일을 덮어쓰지 않고, 빠진 레퍼런스는 측정표에 안 들어간다
-if ONLY in ("ref", "all"):
-    os.makedirs(PREV, exist_ok=True)
-    for f in glob.glob(f"{D}/ref-*.json") + glob.glob(f"{D}/ref-*.md"):
+PREV = f"{D}/_prev"  # 지난 측정 파일 보관 — 번호가 바뀌어도 서로 덮어쓰지 않고, 이번 대상이 아닌 글은 측정표에 안 들어간다
+os.makedirs(PREV, exist_ok=True)
+for pat in (["ref-*"] if ONLY in ("ref", "all") else []) + (["own-*"] if want_own else []):
+    for f in glob.glob(f"{D}/{pat}.json") + glob.glob(f"{D}/{pat}.md"):
         os.replace(f, f"{PREV}/{os.path.basename(f)}")
 
 def reuse(blog, log, stem):  # 온보딩(O4·O7a)이 이미 측정한 같은 글(blogId·logNo 일치)은 다시 받지 않는다
-    cands = glob.glob(f"{PREV}/ref-*.json") if stem.startswith("ref-") else [f"{D}/{stem}.json"]
+    cands = glob.glob(f"{PREV}/ref-*.json") if stem.startswith("ref-") else [f"{PREV}/{stem}.json", f"{D}/{stem}.json"]
     for p in cands:
         try: d = json.load(open(p, encoding="utf-8")); s = d["stats"]
         except (OSError, ValueError, KeyError, TypeError): continue
@@ -307,14 +307,17 @@ for k in idx:
 open(P, "w", encoding="utf-8").write("\n".join(text))
 print("고친 행:", len(groups["ref"]) + len(groups["own"]), "| 소제목(수동) 빈 행:", empty or "없음")
 style = [r["logNo"] for r in json.load(open("knowledge/source-blogs.json", encoding="utf-8")).get("design_references", [])
-         if r.get("role") == "own-style"]
+         if r.get("role") == "own-style"]  # 있으면 평소 경로(★ 아님) — M0가 측정되지 않았어도
 m0 = next((int(split(text[k])[mi]) for k in idx if style and split(text[k])[ci] == f"own-{style[0]}"
            and split(text[k])[mi].isdigit()), None)
 if m0 is not None:  # 값 출처 순서 1 — 레퍼런스 0(목차·문의 제외 환산은 3단계 끝에서 따로 확인)
     print("레퍼런스 0 소제목(수동)", m0, "→ 5단계 공식 min_h2 = 4, max_h2 =", max(7, m0))
 elif groups["ref"]:
     R = st.median(h for _, h in groups["ref"])
-    print("레퍼런스 중앙값 소제목(수동)", R, "→ ★ 경로: lint 키는 기본값 4~7 그대로 — 이 값은 근거 괄호에만")
+    if style:  # 레퍼런스 0 행이 없음(측정 실패·소제목(수동) 빈칸) — 값 출처 순서 3(R)
+        print(f"레퍼런스 0(own-{style[0]}) 소제목(수동) 없음 → 레퍼런스 중앙값", R, "→ 5단계 공식 min_h2 = 4, max_h2 =", max(7, round(R)))
+    else:
+        print("레퍼런스 중앙값 소제목(수동)", R, "→ ★ 경로: lint 키는 기본값 4~7 그대로 — 이 값은 근거 괄호에만")
 PY
 ```
 

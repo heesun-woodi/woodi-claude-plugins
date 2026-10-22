@@ -286,6 +286,36 @@ class SkillScriptsTest(unittest.TestCase):
         self.assertIn("max_h2 = 9", out)
         self.assertIn("| 1 | 다른 표 |", read(out_path))
 
+    def test_stale_own_posts_leave_measurement_table(self):
+        # 지난 실행의 최신 10편 밖 글(own-3)은 _prev/로 옮겨져 자기 글 행·중앙값에 섞이지 않는다
+        self.sources([], own_style="9", info="")
+        self.put("work/own-posts.json", [post("9")])
+        self.put("work/design-system/own-9.json", {"stats": stats("me", "9"), "markdown": "글입니다."})
+        self.put("work/design-system/own-3.json", {"stats": stats("me", "3"), "markdown": "옛 글입니다."})
+        self.run_script("ds-collect")
+        self.run_script("ds-measure")
+        t = read(os.path.join(self.root, "work/design-system/measurements.md"))
+        self.assertIn("| own-9 |", t)
+        self.assertNotIn("own-3", t)
+
+    def test_headings_own_style_without_row_uses_reference_median(self):
+        # 리뷰: own-style은 있는데 그 글 측정이 실패하면 ★ 문구가 아니라 값 출처 순서 3(R)로 max_h2
+        out_path = self.measure_fixture(own_style="5")  # own-5 행 없음(own-7만 있음)
+        self.run_script("ds-measure")
+        rows = read(out_path).split("\n")
+        cols = [c.strip() for c in rows[2].strip().strip("|").split("|")]
+        mi = cols.index("소제목(수동)")
+        for k, ln in enumerate(rows):
+            if ln.startswith("| ref-1-r |"):
+                v = [c.strip() for c in ln.strip().strip("|").split("|")]
+                v[mi] = "10"
+                rows[k] = "| " + " | ".join(v) + " |"
+        with open(out_path, "w", encoding="utf-8") as f:
+            f.write("\n".join(rows))
+        out = self.run_script("ds-headings")
+        self.assertIn("max_h2 = 10", out)
+        self.assertNotIn("★", out)
+
     def test_headings_star_prints_reference_median_as_reference_only(self):
         out_path = self.measure_fixture(own_style=None)
         self.run_script("ds-measure")
