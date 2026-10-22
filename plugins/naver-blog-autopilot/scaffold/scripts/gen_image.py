@@ -69,7 +69,7 @@ QUOTA_HINT = ("Gemini 이미지 모델은 결제(Billing)가 설정된 Google Cl
 BASE_BACKOFF_SECONDS = 2.0
 # 추정치 — gemini-3-pro-image 2K 단가는 요금 페이지에서 확인(https://ai.google.dev/pricing)
 COST_PER_IMAGE_USD = 0.04
-KINDS = {"ai", "photo", "cover", "stock"}  # stock = Pexels 검색(fetch_stock.py) — photo처럼 여기서는 건너뜀
+KINDS = {"ai", "photo", "cover", "stock"}  # stock = 무료 스톡(fetch_stock.py — Openverse 기본·Pexels 선택) — photo처럼 여기서는 건너뜀
 GEN_KINDS = {"ai", "cover"}  # cover = 표지 배경(00-bg.png). 합성은 make_cover.py
 
 # prompt-patterns.md "공통 접두/접미"와 동일하게 유지할 것(tests/test_gen_image.py가 대조).

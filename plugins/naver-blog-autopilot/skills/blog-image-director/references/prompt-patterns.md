@@ -49,25 +49,26 @@
 - "이미지는 AI 생성" 표기 여부는 `knowledge/design-system.md` ⑤를 따른다(규정이 없으면 표기하지 않는다).
 - 캡션에 수치·일정·법령을 새로 넣지 않는다.
 
-## stock 검색어 패턴 (Pexels — image-plan `유형` stock 행)
+## stock 검색어 패턴 (스톡 — Openverse 기본·Pexels 선택, image-plan `유형` stock 행)
 
-이 절은 위 AI 프롬프트 절과 따로 쓴다. stock 행의 프롬프트 칸(`프롬프트(ai) / 검색어(stock) / 후보 파일(photo)`)에는 **검색어만** 적는다. 위의 공통 접두/접미는 stock에 붙지 않는다. `scripts/fetch_stock.py`는 칸의 검색어를 **그대로** Pexels에 보낸다. 프로필 `이미지 기본 장면`도 자동으로 붙이지 않는다. 그래서 장면구의 핵심 명사 1개는 이 스킬이 검색어 안에 직접 넣는다.
+이 절은 위 AI 프롬프트 절과 따로 쓴다. stock 행의 프롬프트 칸(`프롬프트(ai) / 검색어(stock) / 후보 파일(photo)`)에는 **검색어만** 적는다. 위의 공통 접두/접미는 stock에 붙지 않는다. `scripts/fetch_stock.py`는 칸의 검색어를 **그대로** 스톡 제공자(Openverse 기본 — 키 불필요 / 이미 키가 있으면 Pexels)에 보낸다. 프로필 `이미지 기본 장면`도 자동으로 붙이지 않는다. 그래서 장면구의 핵심 명사 1개는 이 스킬이 검색어 안에 직접 넣는다.
 
-- 형식: 영문 **2~4단어 명사구**. 쉼표·문장·`|`·한글은 쓰지 않는다. `{noun}` 자리에 `이미지 기본 장면`의 핵심 명사(또는 글 주제의 사물 명사)를 넣고, 넣은 뒤에도 4단어 이하로 맞춘다.
+- 형식: 영문 **2~3단어 명사구**(4단어 이상은 Openverse에서 0건이 잦다). 쉼표·문장·`|`·한글은 쓰지 않는다. `{noun}` 자리에 `이미지 기본 장면`의 핵심 명사(또는 글 주제의 사물 명사)를 넣고, 넣은 뒤에도 3단어 이하로 맞춘다. 결과가 0건이고 검색어가 3단어면 fetch_stock.py가 마지막 단어를 뺀 검색어로 1회 다시 찾는다(슬롯 줄 끝 ` (검색어 줄임: <새 검색어>)`) — 그래서 핵심 명사를 앞에 둔다.
+- 검색어는 **영문 일반 사물·장면**으로 쓴다. 지명·`Korean`·한국어 간판·한국 거리처럼 한국 특정 장면을 부르는 말은 넣지 않는다 — Openverse에는 그런 사진이 거의 없어 결과가 0건이 되기 쉽다. 그런 슬롯은 stock이 아니라 ai·photo로 잡는다(SKILL.md 유형 판정 규칙).
 - 넣지 않을 말: `sign` `logo` `poster` `menu` `portrait` `face` `smiling` `selfie` `screen` `brand`. 글자·로고·얼굴이 나오기 쉬운 말이다.
 - 한 글 안에서 같은 패턴은 한 번만 쓴다. 이전 글과 같은 검색어도 쓰지 않는다(같은 검색어는 같은 사진을 돌려준다).
 
 | # | 쓰는 슬롯(목적) | 패턴 | 예(업종 중립) |
 |---|---|---|---|
-| 1 | 소제목 요약·분위기 | `laptop wooden desk morning` | `laptop wooden desk morning` |
+| 1 | 소제목 요약·분위기 | `laptop desk morning` | `laptop desk morning` |
 | 2 | 작업 장면 | `{noun} hands closeup` | `notebook hands closeup` |
 | 3 | 제품·상품 | `{noun} top view` | `coffee beans top view` |
 | 4 | 현장(실내) | `empty {noun} interior` | `empty classroom interior` |
 | 5 | 절차 장면 | `{noun} tools workbench` | `garden tools workbench` |
-| 6 | 현장(사람, 원거리) | `person from behind {noun}` | `person from behind bicycle` |
-| 7 | 서류·준비물 | `blank notebook pen desk` | `blank notebook pen desk` |
+| 6 | 현장(사람, 원거리) | `{noun} back view` | `cyclist back view` |
+| 7 | 서류·준비물 | `notebook pen desk` | `notebook pen desk` |
 | 8 | 안전 | `safety gloves {noun}` | `safety gloves toolbox` |
-| 9 | 현장(야외·계절) | `{noun} street autumn morning` | `quiet street autumn morning` |
-| 10 | 표지(`00`) 배경 | `{noun} centered minimal background` | `plant centered minimal background` |
+| 9 | 현장(야외·계절) | `{noun} autumn street` | `quiet autumn street` |
+| 10 | 표지(`00`) 배경 | `{noun} minimal background` | `plant minimal background` |
 
-표지 배경(`00` 행이 stock일 때)은 패턴 10처럼 피사체가 가운데 있고 위아래가 비는 장면을 고른다. 받은 사진은 `images/00-bg.jpg`이고, 제목·배지는 `make_cover.py --bg`가 그 위에 얹는다.
+표지 배경(`00` 행이 stock일 때)은 패턴 10처럼 피사체가 가운데 있고 위아래가 비는 장면을 고른다. 받은 사진은 `images/00-bg.jpg`(원본이 PNG면 `.png` — fetch_stock 슬롯 줄의 경로로 확인)이고, 제목·배지는 `make_cover.py --bg`가 그 위에 얹는다.

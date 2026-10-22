@@ -4,6 +4,14 @@
 
 업종에 묶이지 않고, 업체·전문가·개인·브랜드 블로그 모두에 씁니다. 업체명(개인은 블로그 이름·필명)·연락처·고객 지역·금칙어·공신 출처 같은 블로그 고유 정보는 작업 폴더 `knowledge/`에 두고, 설치 뒤 `/naver-blog-autopilot:blog-onboard`가 대화로 채워 줍니다(아래 [설치 후 온보딩](#설치-후-온보딩약-10분)·[처음 채울 것](#처음-채울-것)).
 
+## 1.1.2에서 바뀐 것
+
+- **무료 스톡 사진의 기본 제공자가 Openverse로 바뀌었습니다.** Pexels가 신규 API 키 발급을 일시 중단해서, 키가 필요 없는 Openverse(WordPress 재단, https://api.openverse.org)를 기본으로 씁니다. CC0·퍼블릭 도메인 사진만 받고, 키 없이 쓰는 익명 한도(분당 20회·하루 200회) 안에서 돕니다. 사진마다 `출처: Openverse/<source> · <작가 또는 작자 미상> · <라이선스> <원본 주소>`를 이미지 계획표에 남깁니다. 온보딩 이미지 소스 보기는 `무료 스톡 사진(키 없이 바로)`로 바뀌었고, 고르면 키 안내 없이 진행합니다. 프로필 `이미지 소스`의 `stock` 값과 이미지 계획표의 `유형=stock`은 그대로입니다.
+- **Pexels는 이미 키가 있을 때만 선택해 씁니다.** `.env`에 `PEXELS_API_KEY`가 있으면 자동으로 Pexels를 씁니다(1.1.0과 같은 동작). 새 env `STOCK_PROVIDER`(`openverse` | `pexels`, 선택)로 직접 고를 수도 있습니다 — 결정 순서는 `STOCK_PROVIDER` → `PEXELS_API_KEY`가 있으면 pexels → 둘 다 없으면 openverse입니다. 값이 둘 중 하나가 아니거나 `STOCK_PROVIDER=pexels`인데 키가 없으면 오류이고, 다른 제공자로 넘어가지 않습니다.
+- **스톡 진단 줄이 `STOCK:` 한 줄로 바뀌었습니다(1.1.1의 Pexels 키 줄 대체).** `blog-setup` 2단계와 `blog-run` Step 0이 `STOCK: OK (openverse, 키 불필요)` · `STOCK: OK (pexels, .env|env)` · `STOCK: MISSING (STOCK_PROVIDER=pexels인데 PEXELS_API_KEY 없음)` · `STOCK: CONFLICT (STOCK_PROVIDER 값이 openverse/pexels가 아님)` 중 한 줄을 냅니다(값은 출력하지 않음). `blog-run`에서 MISSING·CONFLICT는 경고 뒤 스톡 슬롯을 보류하고, OK는 조치가 없습니다.
+- **한국 특정 장면은 stock으로 잡지 않습니다.** 지명·한국어 간판·한국 거리 같은 장면은 Openverse에 거의 없어서, 이미지 디렉터가 그런 슬롯을 AI 생성(`ai`)이나 실사진(`photo`)으로 잡습니다. 스톡 검색어는 영문 일반 사물·장면 2~3단어로 씁니다(결과가 0건이면 마지막 단어를 뺀 검색어로 1회 다시 찾습니다).
+- **1.1.1에서 올리기.** `/plugin`에서 naver-blog-autopilot를 업데이트하고 작업 폴더에서 `/naver-blog-autopilot:blog-setup`을 다시 실행하면 끝입니다(`scripts/`가 바뀝니다). Pexels 키가 이미 `.env`에 있으면 자동으로 Pexels를 계속 씁니다. 프로필·디자인 시스템은 그대로 둡니다.
+
 ## 1.1.1에서 바뀐 것
 
 - **주제에 맞는 관련글이 없으면 억지로 걸지 않습니다.** 1.1.0은 자기 글이 2편 이상이면 주제와 상관없이 관련글 링크 2개를 요구해서, 새 주제로 바꾼 블로그에서는 엉뚱한 글이 관련글로 붙을 수 있었습니다(리허설: AI 도구 글에 다른 업종 글). 이제 writer가 맞는 글이 없다고 판단하면 관련글을 빼고 `draft-v2.md` frontmatter에 `related: none`을 남기고, 업로드본 lint `related_links`는 FAIL 대신 WARN을 냅니다. 게이트 2와 종료 보고에 "주제에 맞는 자기 글이 없어 관련글 생략" 한 줄이 나옵니다. 남은 `[[관련글]]` 자리는 그대로 FAIL입니다.
@@ -21,7 +29,7 @@
   - **톤 선택** — 프로필 `톤`(`합니다체` / `해요체`). 글은 이 톤으로 쓰고, lint의 `tone` 검사도 이 값을 따릅니다(`해요체`면 합니다체 종결을 WARN으로만 셉니다).
   - **마무리 블록 선택** — 프로필 `마무리 블록`에 `문의헤딩`·`소개이미지`·`장소카드`·`해시태그` 중 넣을 것을 적습니다. `해시태그`는 반드시 들어가고, 업로드본 빌드·lint·업로드 검사는 적힌 항목만 봅니다. 문의 헤딩 문구는 `문의 헤딩 문구` 행으로 바꿀 수 있습니다(`## 📞 <문의 헤딩 문구>: <연락처>`, 기본 `문의 안내`).
   - **지역 로테이션 선택** — `고객 지역`을 비우면 지역 키워드 질문·제목 지역(`title_region`) 로테이션·lint `title_region`이 모두 꺼집니다.
-- **이미지 소스 3종.** AI 생성(Gemini/OpenAI) · 무료 스톡(Pexels) · 실사진(`photos/`) 중 하나 이상을 프로필 `이미지 소스`(`ai`·`stock`·`photo`)에 고릅니다. 스톡 슬롯은 `fetch_stock.py`가 받아 오고 사진마다 출처를 기록합니다. 스톡 키 확인은 `check_image_key.py --stock`입니다.
+- **이미지 소스 3종.** AI 생성(Gemini/OpenAI) · 무료 스톡(1.1.0은 Pexels — 1.1.2부터 기본은 키 없는 Openverse, 위 절) · 실사진(`photos/`) 중 하나 이상을 프로필 `이미지 소스`(`ai`·`stock`·`photo`)에 고릅니다. 스톡 슬롯은 `fetch_stock.py`가 받아 오고 사진마다 출처를 기록합니다. 스톡 키 확인은 `check_image_key.py --stock`입니다.
 - **새 스크립트 3개.** `verify_blogs.py`(레퍼런스·주제 소스 블로그의 RSS 응답·최근 발행 수 검증) · `keyword_expand.py`(네이버 연관검색어로 주제 키워드 넓히기 → `knowledge/topic-seeds.md`) · `fetch_stock.py`(스톡 사진 받기). 종료 코드는 [문제 해결](#문제-해결)에 있습니다.
 - **관련글 2편 미만 WARN.** 자기 블로그 글이 2편 미만이면 업로드본 lint `related_links`가 FAIL 대신 WARN을 내고 링크 생략을 허용합니다. 2편 이상이면 1.0.0과 같은 FAIL 규칙입니다. 글 목록 파일(`work/own-posts.json`)이 아직 없을 때도 WARN입니다(`blog-run` Step 0이 항상 만들어 두므로 실제로는 글 수 기준이 적용됩니다).
 - **프로필 v1.1.** 새 행 `블로그 유형`·`톤`·`마무리 블록`·`문의 헤딩 문구`·`주제 키워드`·`이미지 소스`·`이미지 기본 장면`이 생겼고, `업체 유형어`·`업종 일반어`는 선택 행으로 바뀌었습니다. 전체 표는 [처음 채울 것](#처음-채울-것)에 있습니다.
@@ -91,9 +99,9 @@ AUQ = AskUserQuestion. 「기타(Other)」는 도구가 자동으로 붙입니�
 | Q6 | O7a | 레퍼런스 | 레퍼런스로 쓸 글을 고르세요(3~5개 권장, 응답 OK만 쓸 수 있습니다). | `OK인 것 전부 쓰기` / `번호로 고르기` / `레퍼런스 없이 진행` | 주소 1개 이상 |
 | 자유 | O7b | — | 주제 키워드(네이버 연관 검색어를 넓혀 볼 씨앗)를 3~8개 정해 주세요. 제안: <…> 그대로 쓰려면 「그대로」, 바꾸려면 쉼표로 다시 적어 주세요. | — | 항상 |
 | Q7 | O7b·O8 | 주제·출처 | 위 세 표(연관 검색어 · 주제 소스 · 공신 출처)를 이대로 저장할까요? | `전부 이대로 저장` / `고칠 것 있음` / `출처 표는 비워 두기`(개인만) | 항상 |
-| Q8 | O9 | 이미지 소스 | 글에 넣을 이미지를 어디서 가져올까요? 여러 개 고를 수 있습니다. (multiSelect) | `AI 생성(Gemini 또는 OpenAI)` / `무료 스톡 사진(Pexels)` / `내 사진 폴더` | 항상 |
+| Q8 | O9 | 이미지 소스 | 글에 넣을 이미지를 어디서 가져올까요? 여러 개 고를 수 있습니다. (multiSelect) | `AI 생성(Gemini 또는 OpenAI)` / `무료 스톡 사진(키 없이 바로)` / `내 사진 폴더` | 항상 |
 | Q9 | O9 | AI 제공자 | 글에 넣을 이미지를 만들 AI 키를 고르세요. 이미 쓰고 계신 키가 있으면 그것을 고르세요. | `Gemini(Google AI Studio)` / `OpenAI(GPT 이미지)` / `아직 없음 — 나중에` | ai 선택 + 키 확인 비OK |
-| Q10 | O9 | 키 확인 | 안내대로 .env에 키를 넣으셨나요? 키는 채팅에 붙여넣지 말고 .env 파일에 직접 넣어 주세요. | `넣었어요 — 확인해 주세요` / `나중에 넣을게요` (재확인 1회: `다시 넣었어요 — 한 번 더 확인` / `나중에 넣을게요`) | 키 안내를 보여 준 소스가 있을 때 |
+| Q10 | O9 | 키 확인 | 안내대로 .env에 키를 넣거나 줄을 고치셨나요? 키는 채팅에 붙여넣지 말고 .env 파일에 직접 넣어 주세요. | `넣었어요 — 확인해 주세요` / `나중에 넣을게요` (재확인 1회: `다시 넣었어요 — 한 번 더 확인` / `나중에 넣을게요`) | AI 키 안내 또는 스톡 `.env` 안내(`--stock` exit 2·3)를 보여 준 소스가 있을 때 |
 | 자유 | O10 | — | 마지막입니다. 없으면 「없음」만 적어도 됩니다. 금칙어 / 꼭 지켜야 할 점 / 배지 문구(개인 제외) / 브랜드 색 | — | 항상 |
 | — | 자유 입력마다 (제외) | 확인 | 이렇게 받았습니다. 맞나요? | `맞아요` / `고칠게요` | 되돌림 확인 표 뒤 |
 | — | O11 (제외) | 저장 확인 | 아래 값으로 knowledge/의 파일을 씁니다. 이미 채워진 다른 값은 그대로 둡니다. 이대로 저장할까요? | `이대로 저장` / `고칠 것 있음` | 항상 |
@@ -125,7 +133,7 @@ AUQ = AskUserQuestion. 「기타(Other)」는 도구가 자동으로 붙입니�
 
 ### 이미지 키
 
-온보딩 O9는 고른 이미지 소스(AI 생성·무료 스톡·내 사진)의 안내만 보여 주고, `.env`에는 `IMAGE_PROVIDER=` 줄만 씁니다. 키 줄은 담당자가 `.env`에 직접 넣고(채팅에 붙여넣지 않기), "넣었어요"라고 답하면 비용 없는 키 확인을 돌립니다. 발급 절차·확인 명령·종료 코드별 안내의 정본은 [`skills/blog-onboarding/references/image-setup.md`](skills/blog-onboarding/references/image-setup.md) 한 파일입니다.
+온보딩 O9는 고른 이미지 소스(AI 생성·무료 스톡·내 사진)의 안내만 보여 주고, `.env`에는 `IMAGE_PROVIDER=` 줄만 씁니다. 무료 스톡 사진은 기본이 Openverse라 키가 필요 없어 키 안내 없이 `check_image_key.py --stock` 확인만 합니다(Pexels 키가 이미 있는 사람에게만 `PEXELS_API_KEY=` 한 줄 안내 — 선택). 키 줄은 담당자가 `.env`에 직접 넣고(채팅에 붙여넣지 않기), "넣었어요"라고 답하면 비용 없는 키 확인을 돌립니다. 발급 절차·확인 명령·종료 코드별 안내의 정본은 [`skills/blog-onboarding/references/image-setup.md`](skills/blog-onboarding/references/image-setup.md) 한 파일입니다.
 
 ## 왜 이렇게 만들었나
 
@@ -163,8 +171,8 @@ AUQ = AskUserQuestion. 「기타(Other)」는 도구가 자동으로 붙입니�
 | ★마무리 블록 | 필수 | `문의헤딩`·`소개이미지`·`장소카드`·`해시태그` 중 쉼표 목록 | 적힌 순서와 무관하게 **이 고정 순서**로 해석한다. `해시태그`는 반드시 포함 |
 | ★문의 헤딩 문구 | 선택 | 기본 `문의 안내` | 마지막 헤딩 = `## 📞 <문구>: <연락처>` |
 | ★주제 키워드 | 선택 | 쉼표 목록 3~8개 | 연관검색어 확장 씨앗. 확장 결과는 `knowledge/topic-seeds.md` |
-| ★이미지 소스 | 필수 | `ai`·`stock`·`photo` 중 쉼표 목록(1개 이상) | `ai` → `.env IMAGE_PROVIDER`+키, `stock` → `.env PEXELS_API_KEY`, `photo` → `photos/` |
-| ★이미지 기본 장면 | 선택 | 영문 장면구 | gen_image `PROMPT_PREFIX`의 장면 부분·Pexels 검색어 접두. 기본 `Korean everyday scene` |
+| ★이미지 소스 | 필수 | `ai`·`stock`·`photo` 중 쉼표 목록(1개 이상) | `ai` → `.env IMAGE_PROVIDER`+키, `stock` → 키 불필요(Openverse 기본 — `.env STOCK_PROVIDER`·`PEXELS_API_KEY`는 선택), `photo` → `photos/` |
+| ★이미지 기본 장면 | 선택 | 영문 장면구 | gen_image `PROMPT_PREFIX`의 장면 부분·스톡 검색어의 핵심 명사(이미지 디렉터가 검색어에 직접 넣음). 기본 `Korean everyday scene` |
 | 배지 문구 | 선택 | | 1.0.0과 같음 |
 | 브랜드 색 | 선택 | `#RRGGBB` | 1.0.0과 같음 |
 | 업체 유형어 | **선택**(1.0.0은 필수) | 쉼표 목록 | 비우면 빈 목록 |
@@ -180,7 +188,7 @@ AUQ = AskUserQuestion. 「기타(Other)」는 도구가 자동으로 붙입니�
 그 밖에 채울 것:
 
 - 작업 폴더 `.env`의 `NAVER_BLOG_ID=` — 글을 올릴 블로그 ID(`blog.naver.com/<여기>`). lint의 final·upload 단계와 업로드 스크립트가 읽습니다. `/naver-blog-autopilot:blog-setup`과 `/naver-blog-autopilot:blog-onboard`가 값을 물어 적어 줍니다.
-- 작업 폴더 `.env`의 이미지 키 줄 — `이미지 소스`에 `ai`가 있으면 `GEMINI_API_KEY=` 또는 `OPENAI_API_KEY=`(`IMAGE_PROVIDER=` 줄은 온보딩이 적음), `stock`이 있으면 `PEXELS_API_KEY=`. 키 줄은 담당자가 직접 넣습니다(안내 정본 [`image-setup.md`](skills/blog-onboarding/references/image-setup.md)).
+- 작업 폴더 `.env`의 이미지 키 줄 — `이미지 소스`에 `ai`가 있으면 `GEMINI_API_KEY=` 또는 `OPENAI_API_KEY=`(`IMAGE_PROVIDER=` 줄은 온보딩이 적음), `stock`은 키가 필요 없습니다(Pexels 키가 이미 있을 때만 `PEXELS_API_KEY=`, 선택). 키 줄은 담당자가 직접 넣습니다(안내 정본 [`image-setup.md`](skills/blog-onboarding/references/image-setup.md)).
 - `knowledge/source-blogs.json` — `own_blog`(자기 블로그 ID `blogId`(`.env`의 `NAVER_BLOG_ID`와 같은 값)와 카테고리), `topic_sources`(주제 소스 블로그와 카테고리), `design_references`(레퍼런스 글과 "왜 좋은지" 메모 — 자기 글 1편은 `role: "own-style"`로 레퍼런스 0).
 - `knowledge/official-sources.md` — 업종별 공신 출처(법령 DB·공공기관·업체 프로필)와 주장 유형별 조회처·접근성 기록. 팩트체크가 이 파일을 조회처의 정본으로 씁니다.
 - ★`knowledge/topic-seeds.md` — 주제 씨앗(`## 씨앗 키워드`·`## 연관 검색어`·`## 공지 소스`). 온보딩이 `주제 키워드`를 `keyword_expand.py`로 넓혀 만들고, 주제 리서치가 읽습니다. 없어도 주제 리서치는 돕니다.
@@ -227,7 +235,7 @@ $env:NAVER_STATE = "$PWD\playwright-state\storage_state.json"; & "$(uv tool dir)
 
 **블로그 ID와 카테고리.** 글을 올릴 블로그 ID(`blog.naver.com/<여기>`)는 두 곳에 같은 값으로 적습니다 — 작업 폴더 `.env`의 `NAVER_BLOG_ID=`(lint final·upload 단계와 업로드 스크립트가 읽음, `/naver-blog-autopilot:blog-setup`이 물어 적어 줌)와 `knowledge/source-blogs.json`의 `own_blog.blogId`(스킬이 읽음). `/naver-blog-autopilot:blog-run`은 두 값이 없거나 다르면 시작하지 않고, 같으면 그 값을 `naver_upload.sh --blog-id`로 넘깁니다. 스크립트를 직접 돌릴 때 `--blog-id`가 없으면 `.env`의 `NAVER_BLOG_ID`를 씁니다. `lint_post.py`도 `--blog-id`를 받으며, 주면 `.env`보다 우선합니다. 카테고리는 `final.md` frontmatter `category` 또는 `--category` 중 하나가 꼭 있어야 합니다(블로그 ID·카테고리 모두 기본값이 없습니다).
 
-**이미지 소스(하나 이상).** 프로필 `이미지 소스`에 고른 것만 준비합니다 — `ai`(AI 생성, 아래), `stock`(무료 스톡 사진 Pexels — `.env`의 `PEXELS_API_KEY=`, 무료), `photo`(아래 실사진 폴더). 고르는 일과 키 안내는 온보딩 O9가 하고, 안내 정본은 [`skills/blog-onboarding/references/image-setup.md`](skills/blog-onboarding/references/image-setup.md)입니다. 아래는 `ai`를 고를 때의 요약입니다.
+**이미지 소스(하나 이상).** 프로필 `이미지 소스`에 고른 것만 준비합니다 — `ai`(AI 생성, 아래), `stock`(무료 스톡 사진 — 기본 Openverse, 키 불필요, CC0·퍼블릭 도메인만. Pexels는 이미 키가 있으면 `.env`의 `PEXELS_API_KEY=`로 선택 사용 — 신규 키 발급 일시 중단. 제공자를 직접 고르려면 `.env`의 `STOCK_PROVIDER=openverse|pexels`), `photo`(아래 실사진 폴더). 고르는 일과 키 안내는 온보딩 O9가 하고, 안내 정본은 [`skills/blog-onboarding/references/image-setup.md`](skills/blog-onboarding/references/image-setup.md)입니다. 아래는 `ai`를 고를 때의 요약입니다.
 
 **이미지 AI 키(Gemini 또는 OpenAI 중 하나).** 글에 넣을 AI 이미지는 **Gemini**(Google AI Studio) 또는 **OpenAI**(GPT 이미지) 중 담당자가 가진 키 하나로 만듭니다. `/naver-blog-autopilot:blog-onboard`가 어느 쪽을 쓸지 한 번 묻고, `.env`의 `IMAGE_PROVIDER=` 줄을 적은 뒤 그 제공자의 발급 안내만 보여 줍니다(`blog-setup`은 상태만 진단합니다). 키를 넣으면 `scripts/check_image_key.py`가 비용 없이 키와 모델 사용 가능 여부를 확인합니다(이미지를 만들지 않으며 키 값은 출력하지 않음).
 
@@ -245,7 +253,7 @@ GEMINI_API_KEY=여기에_키
 OPENAI_API_KEY=여기에_키
 ```
 
-키가 없어도 `/naver-blog-autopilot:blog-run`은 중단되지 않고 "키 없음 모드"로 진행합니다. 이 경우 키가 없는 소스의 슬롯(AI 이미지·스톡 사진)은 `보류`가 되고 나머지 소스(실사진 등)의 슬롯만 처리됩니다. 단 `photos/`의 실사진이 디자인 시스템의 이미지 수 하한(`min_images`)보다 적으면 **임시저장까지 가지 못합니다**. 시작할 때 "초안까지만 진행"할지 묻고, 이미지 단계(Step 3) 뒤에서 멈춥니다. 키나 실사진을 준비한 뒤 `/naver-blog-autopilot:blog-run resume <NNN>`으로 이어 갑니다.
+키가 없어도 `/naver-blog-autopilot:blog-run`은 중단되지 않고 "키 없음 모드"로 진행합니다. 이 경우 키가 없는 소스의 슬롯(AI 이미지, 그리고 진단이 `STOCK: MISSING`·`CONFLICT`일 때의 스톡 사진)은 `보류`가 되고 나머지 소스(실사진 등)의 슬롯만 처리됩니다. 단 `photos/`의 실사진이 디자인 시스템의 이미지 수 하한(`min_images`)보다 적으면 **임시저장까지 가지 못합니다**. 시작할 때 "초안까지만 진행"할지 묻고, 이미지 단계(Step 3) 뒤에서 멈춥니다. 키나 실사진을 준비한 뒤 `/naver-blog-autopilot:blog-run resume <NNN>`으로 이어 갑니다.
 
 **실사진 폴더(`photo`).** 매장·작업·제품 사진(개인 블로그는 직접 찍은 사진)을 작업 폴더의 `photos/`에 넣어 두세요. 홍보성 글의 이미지는 실사진만 쓰고, 정보성 글은 AI 이미지를 쓰되 실사진이 맞는 슬롯에는 이 폴더의 사진이 매칭됩니다. 이전 글에 쓴 사진은 다시 쓰지 않습니다.
 
@@ -269,7 +277,7 @@ OPENAI_API_KEY=여기에_키
 5. **PYTHONUTF8.** 한글 Windows 콘솔(cp949)에서 스크립트의 이모지 출력이 오류로 멈추지 않게 `setx PYTHONUTF8 1`을 한 번 실행합니다(새로 여는 창부터 적용 — Claude Code를 다시 엽니다).
 6. **한글 글꼴.** Pretendard를 설치하면 가장 좋고, 없어도 Windows 기본 맑은 고딕 Bold(`C:\Windows\Fonts\malgunbd.ttf`)로 표지를 만들 수 있습니다.
 7. **naver-blog-cli·Chromium·로그인.** 위 [사전 요구사항](#사전-요구사항)의 **Windows:** 명령(`…\Scripts\playwright.exe`, `…\Scripts\python.exe`)을 씁니다.
-8. **이미지 키(AI 생성·스톡 사진).** `/naver-blog-autopilot:blog-onboard`가 이미지 소스와 제공자를 묻고 안내합니다. 키는 PowerShell에서 `notepad "$HOME\naver-blog-work\.env"`(실제 작업 폴더 경로로)로 `.env`를 열어 `GEMINI_API_KEY=…`·`OPENAI_API_KEY=…`·`PEXELS_API_KEY=…` 중 필요한 줄을 넣고 저장합니다(채팅에 붙여넣지 않기). 메모장이 저장한 Windows 줄바꿈(CRLF)도 그대로 읽힙니다.
+8. **이미지 키(AI 생성 — 무료 스톡 사진은 키 불필요).** `/naver-blog-autopilot:blog-onboard`가 이미지 소스와 제공자를 묻고 안내합니다. 키는 PowerShell에서 `notepad "$HOME\naver-blog-work\.env"`(실제 작업 폴더 경로로)로 `.env`를 열어 `GEMINI_API_KEY=…`·`OPENAI_API_KEY=…` 중 필요한 줄(Pexels 키가 이미 있으면 `PEXELS_API_KEY=…`도 — 선택)을 넣고 저장합니다(채팅에 붙여넣지 않기). 메모장이 저장한 Windows 줄바꿈(CRLF)도 그대로 읽힙니다.
 
 그다음은 아래 "설치와 첫 사용"과 같습니다. 셋업 진단표 맨 위에 `OS: Windows(Git Bash)`가 나오면 맞게 돈 것입니다.
 
@@ -330,7 +338,7 @@ Claude Code가 없다면 먼저 설치합니다(Windows는 Git for Windows를 �
    ```
 
    환경(uv·Python·Chromium·naver-blog-cli·네이버 세션·이미지 AI 키)을 진단하고 `scaffold/`를 작업 폴더로 복사합니다. `scripts/`는 매번 최신본으로 갱신하고, `knowledge/`는 보존합니다(담당자가 고친 파일은 덮어쓰지 않고, 아직 채워지지 않은 스텁만 교체). 이미지 키는 상태만 진단합니다(고르기·발급 안내는 온보딩이 합니다). 결과를 표로 보여 주고 빠진 항목마다 실행할 명령을 출력한 뒤, 프로필이 비어 있으면(첫 셋업이면 정상) **"지금 온보딩을 시작할까요?"**를 묻습니다 — `시작`이면 [설치 후 온보딩](#설치-후-온보딩약-10분)이 바로 이어집니다.
-5. 진단표가 알려 준 설치·로그인 명령은 **터미널(Windows는 PowerShell)에서** 실행합니다(Claude 입력창이 아님). 진단표는 OS에 맞는 갈래만 보여 줍니다. 네이버 로그인은 **1회, 사람이 직접** 하고 "로그인 상태 유지"를 반드시 체크합니다(위 "로그인은 1회" 참고). `.env`에 고른 소스의 키(`GEMINI_API_KEY=…`·`OPENAI_API_KEY=…`·`PEXELS_API_KEY=…`)를 채웁니다(채팅에 키를 붙여넣지 마세요). 온보딩 중에 "넣었어요"라고 답하면 바로 `check_image_key.py`(스톡 사진은 `--stock`)로 확인합니다. 블로그 ID를 물으면 `blog.naver.com/<여기>`의 ID를 답합니다(`.env`의 `NAVER_BLOG_ID=`로 저장됨).
+5. 진단표가 알려 준 설치·로그인 명령은 **터미널(Windows는 PowerShell)에서** 실행합니다(Claude 입력창이 아님). 진단표는 OS에 맞는 갈래만 보여 줍니다. 네이버 로그인은 **1회, 사람이 직접** 하고 "로그인 상태 유지"를 반드시 체크합니다(위 "로그인은 1회" 참고). `.env`에 고른 소스의 키(`GEMINI_API_KEY=…`·`OPENAI_API_KEY=…` — 무료 스톡 사진은 키 불필요, Pexels 키가 이미 있으면 `PEXELS_API_KEY=…`도 선택)를 채웁니다(채팅에 키를 붙여넣지 마세요). 온보딩 중에 "넣었어요"라고 답하면 바로 `check_image_key.py`(스톡 사진은 `--stock`)로 확인합니다. 블로그 ID를 물으면 `blog.naver.com/<여기>`의 ID를 답합니다(`.env`의 `NAVER_BLOG_ID=`로 저장됨).
 6. 온보딩을 `나중에`로 미뤘다면 `/naver-blog-autopilot:blog-onboard`로 [처음 채울 것](#처음-채울-것)의 `knowledge/` 파일을 채웁니다(디자인 시스템도 온보딩 마지막 단계에서 만들어집니다). 마무리 블록에 소개 이미지를 넣기로 했다면 `photos/business-intro.png`도 준비합니다.
 7. Claude Code 입력창에서 `/naver-blog-autopilot:blog-setup ~/naver-blog-work`를 다시 실행해 모든 항목이 "확인됨"인지 봅니다.
 8. 글을 시작합니다.
@@ -354,7 +362,7 @@ Claude Code가 없다면 먼저 설치합니다(Windows는 Git for Windows를 �
 | B' 수정 + SEO | `blog-writer` 재개 + `blog-naver-seo` 스킬 | `draft-v2.md`, `seo.md` | - |
 | Step 2 lint | 메인 + `lint_post.py --stage draft` | `lint.json` | - |
 | 게이트 2 | 메인 | `gates.md` `## 초안피드백`, `work/feedback-log.md` | ● 제목 A/B안(제목 지역 포함 확인)·톤·길이 피드백 + 요청마다 "앞으로 계속/이번 글만" |
-| Step 3 이미지·표지 | 메인 + `blog-image-director` 스킬 + `gen_image.py` + `fetch_stock.py`(stock 슬롯) + `make_cover.py` | `images/image-plan.md`(`00` 표지 행 포함), `images/NN-*.png`, `images/NN-*.jpg`(stock), `images/00-bg.png`·`images/00-cover.png` | ● 게이트 3: 표지(승인/줄바꿈·배지 재생성/배경 재생성/실사진 배경) → 슬롯별 승인/재생성/실사진 교체/제거 |
+| Step 3 이미지·표지 | 메인 + `blog-image-director` 스킬 + `gen_image.py` + `fetch_stock.py`(stock 슬롯) + `make_cover.py` | `images/image-plan.md`(`00` 표지 행 포함), `images/NN-*.png`, `images/NN-*.jpg`·`.png`(stock), `images/00-bg.png`·`images/00-cover.png` | ● 게이트 3: 표지(승인/줄바꿈·배지 재생성/배경 재생성/실사진 배경) → 슬롯별 승인/재생성/실사진 교체/제거 |
 | Step 4 업로드본 빌드 | 메인 + `build_final.py` + `lint_post.py --stage upload` | `final.md`(출처·캡션 제거, 소제목 여백, 마무리 블록), `lint.json` | - |
 | Step 5 업로드 | 메인 + `blog-naver-upload` 스킬 + `naver_upload.sh`(`create-draft-from-folder`) | `upload.log`, `gates.md` `## 업로드`(장소·대표이미지 결과), `work/variation-log.md` 한 줄 | - |
 | 학습 정리 | 메인 + `blog-learn` 스킬 | `knowledge/learned-preferences.md` | ● 새 규칙·승격 규칙 승인(대기 피드백이 있을 때만) |
@@ -365,7 +373,7 @@ Claude Code가 없다면 먼저 설치합니다(Windows는 Git for Windows를 �
 - 게이트 2의 수정은 한 번만 돕니다. 사실 문장이 바뀌었으면 C를 한 번 더(`r2`) 돌립니다.
 - 업로드(Step 5)는 로그인·2단계 인증·CAPTCHA가 끼어들 수 있어 서브에이전트에 맡기지 않고 메인이 직접 합니다.
 - 대표이미지는 표지(`00-cover`)입니다. 업로드가 본문 맨 앞에 넣고 대표로 지정하므로, 미리보기에서 첫 사진에 '대표' 표시가 있는지만 확인하면 됩니다.
-- **stock 슬롯**: 프로필 `이미지 소스`에 `stock`이 있으면 이미지 디렉터가 image-plan에 `유형`이 `stock`인 행(검색어 = 영문 2~4단어)을 적고, `fetch_stock.py`가 Pexels에서 가로 사진을 받아 `images/NN-<slug>.jpg`로 저장하며 `출처: Pexels/<촬영자> <사진 주소>`를 남깁니다. 검색 결과가 없으면 그 슬롯은 `보류`입니다.
+- **stock 슬롯**: 프로필 `이미지 소스`에 `stock`이 있으면 이미지 디렉터가 image-plan에 `유형`이 `stock`인 행(검색어 = 영문 일반 사물·장면 2~3단어 — 한국 특정 장면은 stock으로 잡지 않음)을 적고, `fetch_stock.py`가 무료 스톡 사진을 받아 `images/NN-<slug>.jpg`(원본이 PNG면 `.png`)로 저장합니다. 기본은 Openverse(키 불필요, CC0·퍼블릭 도메인만 — `출처: Openverse/<source> · <작가 또는 작자 미상> · <라이선스> <원본 주소>`), 이미 키가 있으면 Pexels(선택 — `출처: Pexels/<촬영자> <사진 주소>`)입니다. 결과가 0건이고 검색어가 3단어 이상이면 마지막 단어를 뺀 검색어로 1회 다시 찾습니다(슬롯 줄 끝 ` (검색어 줄임: <새 검색어>)`). 그래도 결과가 없거나 다섯 후보 모두 받기에 실패하면 그 슬롯은 `보류`(`검색 결과 없음`·`사진 받기 실패`)입니다.
 - 끝나면 임시저장 제목·카테고리·태그·이미지 수·장소 카드(`장소카드`가 있을 때)와 "네이버 앱/웹 → 글쓰기 → 임시저장 글 → 미리보기 → 발행" 안내가 나옵니다.
 
 ## 콘텐츠 고치기와 학습
@@ -477,7 +485,7 @@ work/
     research.md  draft.md  factcheck.md  seo.md
     draft-v2.md                 # 팩트 반영 + SEO + 관련글 실제 URL(출처 괄호 포함 원본)
     draft-v2.shown.md           # 게이트 2에서 마지막으로 보여 준 판(담당자 직접 수정 비교 기준)
-    images/image-plan.md  images/NN-*.png  images/NN-*.jpg(stock)  images/00-bg.png  images/00-cover.png(대표이미지)
+    images/image-plan.md  images/NN-*.png  images/NN-*.jpg·.png(stock)  images/00-bg.png  images/00-cover.png(대표이미지)
     final.md                    # build_final.py 결과: 출처·캡션 없음, 이미지 절대경로, 마무리 블록
     lint.json  upload.log
 ```
@@ -495,7 +503,7 @@ work/
 ## 비용
 
 - **이미지**: 제공자마다 다릅니다. **Gemini**는 장당 약 $0.04입니다. 이 값은 `gen_image.py`의 `COST_PER_IMAGE_USD`에 적힌 **추정치**이고 검증된 단가가 아닙니다. 실제 요금은 https://ai.google.dev/pricing 에서 확인하세요. 글 한 편에 필요한 이미지 수는 디자인 시스템 ④(글자 수 ÷ 이미지당 글자 수)로 정해지므로, Gemini 이미지 비용은 대략 이미지 수 × $0.04(추정치 기준)로 어림할 수 있습니다. **OpenAI(GPT 이미지)**는 이 문서에 금액을 적지 않습니다 — OpenAI 요금 페이지(https://openai.com/api/pricing/)에서 모델·크기별 단가를 확인하세요. 어느 쪽이든 재생성도 과금되고, 키 확인(`check_image_key.py`)은 비용이 없습니다. 표지는 배경 1장만 생성 비용이 들고(실사진 배경이면 0), 글자 합성(`make_cover.py`)은 로컬이라 비용이 없습니다. `gen_image.py --dry-run`으로 API 호출 없이 예상 비용을 먼저 볼 수 있습니다.
-- **스톡 사진(Pexels)**: 무료입니다.
+- **무료 스톡 사진(Openverse 기본 · Pexels 선택)**: 무료입니다. 요청 한도만 있습니다(Openverse 익명 한도 분당 20회·하루 200회).
 - **모델 사용량**: 글 한 편에 opus 에이전트가 기본 3회(B·C·B'), 재작업까지 최대 7회 돕니다. 메인 세션의 주제 리서치·이미지 검수도 따로 듭니다. 토큰 사용량은 글 길이와 재작업 횟수에 따라 크게 달라지고 요금제마다 과금 방식이 달라, 이 문서에서는 금액을 단정하지 않고 "opus 호출 3~7회" 정도로만 안내합니다.
 - 네이버 임시저장과 법령 조회(law.go.kr DRF)는 비용이 없습니다.
 
@@ -519,7 +527,7 @@ work/
 
 `--dry-run`을 붙이면 lint·머리말·이미지 경로·표지 존재만 확인하고 네이버에는 접속하지 않습니다.
 
-**새 스크립트 종료 코드 (1.1.0)**
+**새 스크립트 종료 코드 (1.1.0 · 무료 스톡은 1.1.2 기준)**
 
 | 스크립트 | 코드 | 의미 | 할 일 |
 |---|---|---|---|
@@ -529,22 +537,26 @@ work/
 | `keyword_expand.py` | 0 | 완료(결과 0개여도 0 — 빈 표와 stderr 안내) | 결과가 비면 씨앗 키워드를 바꿔 다시 |
 | `keyword_expand.py` | 2 | 인자(씨앗) 없음 | 씨앗 키워드를 넣어 다시 |
 | `keyword_expand.py` | 5 | 모든 요청 네트워크 실패(일부 실패는 stderr 경고 후 계속) | 인터넷 연결 확인 후 다시 |
-| `fetch_stock.py` | 0 | 처리 완료(보류 포함 — 끝 줄 `저장 n장 · 보류 n장`) | `보류` 행은 `검수` 칸 사유(`검색 결과 없음`·`검색어 없음`)를 보고 검색어를 고치거나 다른 소스로 |
-| `fetch_stock.py` | 2 | 키 없음(`스톡 키 없음 — .env에 PEXELS_API_KEY=…`)·image-plan 없음·표 파싱 실패 | `.env`에 `PEXELS_API_KEY=` 넣기, 또는 `images/image-plan.md` 확인 |
-| `fetch_stock.py` | 3 | 키 거부(401·403) | Pexels 키를 다시 복사하고 `check_image_key.py --stock`으로 확인 |
-| `fetch_stock.py` | 6 | 사용량 초과(429) — 재시도 없이 중단 | 잠시 뒤 다시 |
-| `fetch_stock.py` | 5 | 네트워크·5xx | 인터넷 연결 확인 후 다시 |
+| `fetch_stock.py` | 0 | 처리 완료(보류 포함 — 끝 줄 `저장 n장 · 보류 n장`) | `보류` 행은 `검수` 칸 사유(`검색 결과 없음`·`검색어 없음`·`사진 받기 실패`)를 보고 검색어를 더 짧은 일반 사물(영문 2~3단어)로 고치거나 다른 소스로 |
+| `fetch_stock.py` | 2 | 설정 오류 — `STOCK_PROVIDER` 값이 `openverse`/`pexels`가 아님(`오류: STOCK_PROVIDER 값이 올바르지 않습니다 — …`) · `STOCK_PROVIDER=pexels`인데 `PEXELS_API_KEY` 없음 · image-plan 없음·표 파싱 실패 | `.env`의 `STOCK_PROVIDER=` 줄을 `openverse`로 고치거나 지우기(Pexels 키가 이미 있으면 `PEXELS_API_KEY=` 넣기), 또는 `images/image-plan.md` 확인 |
+| `fetch_stock.py` | 3 | 거부(401·403) | pexels면 키를 다시 복사하고, 어느 쪽이든 `check_image_key.py --stock`으로 확인 |
+| `fetch_stock.py` | 5 | 네트워크·5xx·JSON 아닌 응답 | 인터넷 연결 확인 후 다시 |
+| `fetch_stock.py` | 6 | 요청 한도(429 — `Openverse 429: 요청 한도 초과…`, 익명 한도 분당 20회·하루 200회) — 재시도 없이 중단 | 잠시 뒤 `--only <남은 슬롯>`으로 이어 받기 |
+| `check_image_key.py --stock` | 0 | `스톡 확인: openverse 사용 가능 (키 불필요)` 또는 `스톡 키 확인: pexels 사용 가능 (<source>)` | - |
+| `check_image_key.py --stock` | 2 | `STOCK_PROVIDER` 값 오류(`스톡 설정 오류: STOCK_PROVIDER 값이 올바르지 않습니다 — …`) · `STOCK_PROVIDER=pexels`인데 키 없음 | 위 `fetch_stock.py` 2와 같음 |
+| `check_image_key.py --stock` | 3 | pexels 키 거부(401·403) | Pexels 키를 다시 복사 |
+| `check_image_key.py --stock` | 5 | 네트워크·5xx, openverse 요청 한도(`확인 실패: openverse HTTP 429 — 요청 한도 — 잠시 뒤 다시`) | 인터넷 연결 확인 후 잠시 뒤 다시 |
 | `check_profile.py` | 0 / 2 | `profile: OK` / `profile: NOFILE`·`MISSING <행>,…`·`INVALID <행>=<값>` | 아래 "프로필 행·블로그 ID가 비었다는 오류가 날 때" |
 
-`fetch_stock.py --dry-run`은 네트워크에 접속하지 않고 행별 `슬롯 · 검색어 · 예상 파일명`만 보여 줍니다. 시작 줄 `스톡: pexels · 키: <source>`에는 키 값이 나오지 않습니다.
+`fetch_stock.py --dry-run`은 네트워크에 접속하지 않고 결정된 제공자와 행별 `슬롯 · 검색어 · 예상 파일명`만 보여 줍니다. 시작 줄은 `스톡: openverse · 키: 필요 없음` 또는 `스톡: pexels · 키: <source>`이고, 키 값은 나오지 않습니다.
 
-**스톡 사진 키 확인 (`check_image_key.py --stock`).** Pexels 키(`PEXELS_API_KEY`)를 비용 없이 확인합니다(사진을 받지 않고, 키 값은 출력하지 않습니다). `--stock` 없이 부르면 1.0.0과 같이 AI 이미지 키를 확인합니다.
+**무료 스톡 확인 (`check_image_key.py --stock`).** 결정된 스톡 제공자를 비용 없이 확인합니다(사진을 받지 않고, 키 값은 출력하지 않습니다). openverse는 검색 1회로, pexels는 키(`PEXELS_API_KEY`)로 확인합니다. `--stock` 없이 부르면 1.0.0과 같이 AI 이미지 키를 확인합니다.
 
 ```bash
 python3 scripts/check_image_key.py --stock
 ```
 
-종료 0 `스톡 키 확인: pexels 사용 가능 (<source>)` · 2 키 없음(`스톡 키 없음 — .env에 PEXELS_API_KEY=…`) · 3 거부(401·403) · 5 네트워크. 결과별 안내의 정본은 [`image-setup.md`](skills/blog-onboarding/references/image-setup.md) 2절입니다.
+종료 코드는 위 표의 `check_image_key.py --stock` 행과 같습니다. 결과별 안내의 정본은 [`image-setup.md`](skills/blog-onboarding/references/image-setup.md) 2-3절입니다.
 
 **프로필 행·블로그 ID가 비었다는 오류가 날 때.** 스크립트는 업체 값을 기본값으로 지어 넣지 않고 멈춥니다(exit 2). 비어 있는 필수·조건 행은 `blog-run` Step 0의 `profile: MISSING <행>` 줄과 `blog-setup` 진단표에 나오고, 값이 열거값과 다르면 `profile: INVALID <행>=<값>`이 나옵니다. 가장 쉬운 길은 `/naver-blog-autopilot:blog-onboard`를 실행해 그 항목만 다시 고르는 것입니다. 직접 고칠 때는 오류 메시지에 나온 `knowledge/business-profile.md`의 행(예: `블로그 유형`·`톤`·`마무리 블록`·`이미지 소스`·`장소 검색어`·`연락처`)이나 `## 금칙어` 절(없으면 `- 없음` 한 줄), `.env`의 `NAVER_BLOG_ID`, `knowledge/source-blogs.json`의 `own_blog.blogId`, 또는 `--blog-id`·`--category` 인자를 채운 뒤 같은 단계를 다시 실행합니다. `blog-run`이 `blogId: MISMATCH`로 멈췄다면 `.env`와 `own_blog.blogId`의 값을 같게 맞춥니다. `마무리 블록` 행이 없거나 비어 있으면 업로드본 lint(`--stage upload`)는 exit 2, `build_final.py`는 exit 1(변환 불가), `naver_upload.sh`는 exit 10(lint를 먼저 돌림)으로 멈춥니다 — 셋 다 그 행을 채우라는 문구를 냅니다.
 

@@ -184,10 +184,9 @@ class CheckStockKeyTest(unittest.TestCase):
         self.assertEqual(out.getvalue().strip(), "스톡 키 확인: pexels 사용 가능 (환경변수)")
 
     def test_stock_exit_2_no_key_and_conflicts(self):
-        rc, text, seen = self.run_check(f"GEMINI_API_KEY={FAKE_GEMINI}\n", argv=["--stock"])
-        self.assertEqual((rc, seen), (2, []))
-        self.assertIn("스톡 키 없음 — .env에 PEXELS_API_KEY=…", text)
-        self.assertIn("https://www.pexels.com/api/", text)
+        rc, text, seen = self.run_check(f"GEMINI_API_KEY={FAKE_GEMINI}\nSTOCK_PROVIDER=pexels\n", argv=["--stock"])
+        self.assertEqual((rc, seen), (2, []))  # pexels를 지정했는데 키가 없으면 openverse로 넘어가지 않는다
+        self.assertEqual(text.strip(), "Pexels 키가 없습니다 — .env의 STOCK_PROVIDER를 openverse로 고치거나 그 줄을 지우면 키 없이 무료 스톡을 씁니다")
         rc, _, seen = self.run_check(f"PEXELS_API_KEY={FAKE_PEXELS}\n", argv=["--stock", "--provider", "openai"])
         self.assertEqual((rc, seen), (2, []))
         rc, _, seen = self.run_check(argv=["--stock", "--env", os.path.join(self.tmp.name, "nope.env")])
@@ -211,6 +210,47 @@ class CheckStockKeyTest(unittest.TestCase):
             http_error(429, {"error": "rate limit"})), argv=["--stock"])
         self.assertEqual(rc, 5)
         self.assertIn("HTTP 429", text)
+
+    def test_stock_openverse_default_no_key(self):
+        rc, text, seen = self.run_check(f"GEMINI_API_KEY={FAKE_GEMINI}\n", argv=["--stock"])
+        self.assertEqual(rc, 0)
+        self.assertEqual(text.strip(), "스톡 확인: openverse 사용 가능 (키 불필요)")
+        self.assertEqual(len(seen), 1)
+        req = seen[0]
+        self.assertEqual(req.full_url, "https://api.openverse.org/v1/images/?q=desk"
+                                       "&license=cc0,pdm&aspect_ratio=wide&mature=false&page_size=1")
+        self.assertEqual(req.get_method(), "GET")
+        self.assertRegex(req.get_header("User-agent"), r"^naver-blog-autopilot/\d+\.\d+\.\d+ \(\+https://github\.com/heesun-woodi/woodi-claude-plugins\)$")
+        self.assertIsNone(req.get_header("Authorization"))
+
+    def test_stock_explicit_openverse_ignores_pexels_key(self):
+        rc, text, seen = self.run_check(f"STOCK_PROVIDER=openverse\nPEXELS_API_KEY={FAKE_PEXELS}\n", argv=["--stock"])
+        self.assertEqual(rc, 0)
+        self.assertIn("openverse 사용 가능 (키 불필요)", text)
+        self.assertTrue(seen[0].full_url.startswith("https://api.openverse.org/"))
+        self.assert_no_pexels_key(text)
+
+    def test_stock_openverse_exit_5(self):
+        rc, text, _ = self.run_check(None, lambda r, t: (_ for _ in ()).throw(http_error(429, {})), argv=["--stock"])
+        self.assertEqual(rc, 5)
+        self.assertIn("요청 한도 — 잠시 뒤 다시", text)
+        rc, text, _ = self.run_check(None, lambda r, t: (_ for _ in ()).throw(http_error(503, {})), argv=["--stock"])
+        self.assertEqual(rc, 5)
+        self.assertIn("HTTP 503", text)
+        rc, text, _ = self.run_check(None, lambda r, t: (_ for _ in ()).throw(urllib.error.URLError("no route")), argv=["--stock"])
+        self.assertEqual(rc, 5)
+        self.assertIn("네트워크 오류", text)
+
+    def test_stock_provider_value_error_exit_2(self):
+        rc, text, seen = self.run_check("STOCK_PROVIDER=zzqqbing\n", argv=["--stock"])
+        self.assertEqual((rc, seen), (2, []))
+        self.assertIn("STOCK_PROVIDER 값이 올바르지 않습니다", text)
+        self.assertNotIn("zzqqbing", text)
+
+    def test_stock_pexels_explicit_with_key_checks_pexels(self):
+        rc, text, seen = self.run_check(f"STOCK_PROVIDER=pexels\nPEXELS_API_KEY={FAKE_PEXELS}\n", argv=["--stock"])
+        self.assertEqual(rc, 0)
+        self.assertTrue(seen[0].full_url.startswith("https://api.pexels.com/"))
 
     def test_without_stock_flag_ignores_pexels(self):
         rc, text, seen = self.run_check(f"PEXELS_API_KEY={FAKE_PEXELS}\n")

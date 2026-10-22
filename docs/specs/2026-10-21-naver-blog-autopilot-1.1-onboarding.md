@@ -305,3 +305,47 @@ plan §3-4 표와 같다(재수록하지 않음). 공통: `## 📞 문의 안내
 ## 부록 D. 메인이 통합 grep에 쓰는 철자 목록
 
 행 이름: `블로그 유형` `톤` `마무리 블록` `문의 헤딩 문구` `주제 키워드` `이미지 소스` `이미지 기본 장면` · 마무리 블록 항목: `문의헤딩` `소개이미지` `장소카드` `해시태그` · 이미지 소스 항목: `ai` `stock` `photo` · env: `PEXELS_API_KEY` · 파일: `topic-seeds.md` · 스크립트: `verify_blogs.py` `keyword_expand.py` `fetch_stock.py` · 헬퍼: `load_closing_blocks` `load_tone` `load_image_sources` `own_posts_count` · 커맨드: `/naver-blog-autopilot:blog-onboard`
+
+---
+
+## 5. 1.1.2 — 무료 스톡 기본 제공자를 Openverse로 (2026-10-22)
+
+배경: Pexels가 신규 API 키 발급을 일시 중단했다(공식 API 페이지 안내). 모임 참가자가 키 없이 스톡 사진을 쓰도록 키가 필요 없는 Openverse(WordPress 재단, https://api.openverse.org)를 기본으로 하고, Pexels는 이미 키가 있는 사람용으로 남긴다. 프로필 `이미지 소스`의 `stock` 값과 image-plan `유형=stock`은 그대로다.
+
+### 5-1 제공자 결정 (`.env`)
+
+- 새 env `STOCK_PROVIDER` = `openverse` | `pexels` (선택).
+- 결정 순서: `STOCK_PROVIDER`가 있으면 그 값 → 없고 `PEXELS_API_KEY`가 있으면 `pexels` → 둘 다 없으면 `openverse`.
+- `STOCK_PROVIDER` 값이 둘 중 하나가 아니면 오류(값은 출력하지 않음). `STOCK_PROVIDER=pexels`인데 키가 없으면 오류(다른 제공자로 넘어가지 않음).
+- `.env` 탐색 순서는 1.1.0과 같다(`--env` → cwd `.env` → image-plan 상위 폴더 `.env` → 환경변수). `STOCK_PROVIDER`도 같은 곳에서 읽는다.
+
+### 5-2 Openverse 호출 규칙 (`fetch_stock.py`)
+
+- 요청: `GET https://api.openverse.org/v1/images/?q=<URL인코딩 검색어>&license=cc0,pdm&aspect_ratio=wide&mature=false&page_size=20`
+- 헤더: `User-Agent: naver-blog-autopilot/<plugin version> (+https://github.com/heesun-woodi/woodi-claude-plugins)`. 키 없음(익명 한도: 분당 20회·하루 200회 — 응답 헤더 `x-ratelimit-*`).
+- 선택: `results[]`를 순서대로 보며 ① `url`이 비어 있지 않고 ② 원본 `width`가 1200 이상이고 ③ 이미 이 작업 폴더의 다른 글 image-plan에 같은 원본 페이지(`foreign_landing_url`)가 기록돼 있지 않은 첫 결과의 `url`을 받는다. 받은 파일의 실제 가로가 800px 미만이거나 JPEG·PNG가 아니면 버리고 다음 결과(사진 받기는 슬롯당 최대 5번).
+- 저장: JPEG면 `images/NN-<slug>.jpg`, PNG면 `images/NN-<slug>.png`. 실제 가로 판정은 표준 라이브러리로 JPEG SOF / PNG IHDR 헤더를 읽는다.
+- 출처 기록(`출처` 열, 없으면 `검수` 칸): `출처: Openverse/<source> · <creator 또는 작자 미상> · <license 대문자> <foreign_landing_url>`.
+- 결과 0건(또는 조건에 맞는 결과 없음)이고 검색어가 3단어 이상이면 마지막 단어를 뺀 검색어로 1회 재검색한다. 재검색으로 받으면 슬롯 줄 끝에 ` (검색어 줄임: <새 검색어>)`를 붙이고 image-plan 검색어 칸은 그대로 둔다. 그래도 없으면 1.1.0과 같이 `보류`·`검색 결과 없음`.
+- 사진 받기(이미지 파일 다운로드) 단계의 403·404·429·5xx·네트워크 오류는 그 후보만 건너뛰고 다음 결과로 간다(슬롯당 받기 최대 5번 유지). 다섯 후보 모두 받기 실패면 그 슬롯은 `보류`·`검수` 칸 `사진 받기 실패`. 검색 API(api.openverse.org) 오류는 아래 exit 규칙대로 중단한다.
+- 받기 예산·거르기: 슬롯당 받기 최대 5번은 1차 검색과 재검색을 합친 횟수이고 이미 시도한 URL은 다시 받지 않는다(1차에서 5번을 다 썼으면 재검색 없음). 결과의 `filetype`이 있으면 jpg·jpeg·png만 후보, 받을 때 `Content-Length`가 8,000,000바이트 초과(또는 아래 형식 판정에서 걸러지는 `Content-Type`)면 본문을 읽지 않고 건너뛰며(길이 헤더가 없으면 청크로 읽다 8,000,000바이트를 넘는 순간 중단) 받기 1번으로 센다. 보류 사유: 받기를 시도했고 모두 받기 오류면 `사진 받기 실패`, 그 외는 `검색 결과 없음`.
+- 형식 판정: 응답 `Content-Type`이 image/jpeg·image/png면 통과, 다른 형식(image/tiff·text/html 등)이면 본문을 읽지 않고 건너뛴다. 헤더가 없거나 application/octet-stream·binary/octet-stream·image/jpg·image/pjpeg이면 본문을 받은 뒤(상한 8,000,000바이트 그대로) 앞부분 매직 바이트(JPEG FFD8FF, PNG 89504E47)로 판정한다. `Content-Length`가 숫자인데 받은 합계와 다르면(잘린 본문) 받기 오류로 세고 파일을 쓰지 않는다. 읽기 중 예외(IncompleteRead 등)도 그 후보만 받기 오류.
+- 시작 줄: `스톡: openverse · 키: 필요 없음` / `스톡: pexels · 키: <source>`. 끝 줄 `저장 n장 · 보류 n장`(1.1.0과 같음).
+- exit: 0 완료(보류 포함) · 2 설정 오류(`STOCK_PROVIDER` 값 오류 · pexels인데 키 없음 · image-plan 없음/파싱 실패) · 3 거부(401·403) · 5 네트워크·5xx·JSON 아님 · 6 요청 한도(429, 재시도 없음). Pexels 경로의 동작·문구는 1.1.0과 같다.
+- `--dry-run`: 네트워크 0, 시작 줄에 결정된 제공자를 보인다.
+
+### 5-3 키·제공자 확인 (`check_image_key.py --stock`)
+
+- openverse: 검색 1회(`q=desk`, `page_size=1`, 위 헤더)로 확인. 출력 `스톡 확인: openverse 사용 가능 (키 불필요)` exit 0 / 네트워크·5xx exit 5 / 429 exit 5(`요청 한도 — 잠시 뒤 다시`).
+- pexels: 1.1.0과 같다(`스톡 키 확인: pexels 사용 가능 (<source>)`, exit 0/2/3/5).
+- `STOCK_PROVIDER` 값 오류 · pexels인데 키 없음 → exit 2.
+
+### 5-4 진단 줄 (blog-setup 2단계 · blog-run Step 0 — `PEXELS_KEY:` 줄을 대체)
+
+`이미지 소스`에 `stock`이 있을 때만(blog-setup은 항상) 한 줄: `STOCK: OK (openverse, 키 불필요)` · `STOCK: OK (pexels, .env|env)` · `STOCK: MISSING (STOCK_PROVIDER=pexels인데 PEXELS_API_KEY 없음)` · `STOCK: CONFLICT (STOCK_PROVIDER 값이 openverse/pexels가 아님)`. 값은 출력하지 않는다. blog-run에서 MISSING·CONFLICT는 경고 후 「스톡 슬롯 보류」 모드(1.1.0의 `PEXELS_KEY: MISSING`과 같은 처리), OK는 조치 없음.
+
+### 5-5 사용자에게 보이는 이름
+
+- 온보딩 이미지 소스 보기: `무료 스톡 사진(키 없이 바로)`(기존 `무료 스톡 사진(Pexels)` 대체). 고르면 키 안내 없이 진행하고, Pexels 키가 이미 있는 사람만 `.env`에 `PEXELS_API_KEY=`(선택)를 넣는다고 한 줄 안내.
+- 문서 표기: 「무료 스톡 사진(Openverse — 키 불필요, CC0·퍼블릭 도메인만)」. Pexels는 「이미 키가 있으면 선택 사용(신규 키 발급 일시 중단)」.
+- 한국 특정 장면(지명·한국어 간판·한국 거리)은 Openverse에 거의 없다 → 이미지 디렉터는 그런 슬롯을 stock으로 잡지 않고 ai·photo로.

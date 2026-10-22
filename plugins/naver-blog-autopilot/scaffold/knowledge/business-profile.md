@@ -16,7 +16,7 @@
 | 마무리 블록 | [문의헤딩, 소개이미지, 장소카드, 해시태그 중 쉼표 목록 — 해시태그는 반드시 포함, 적은 순서와 무관하게 이 순서로 붙음] |
 | 문의 헤딩 문구 | [선택: 마지막 헤딩 문구 — 비우면 문의 안내, 헤딩은 ## 📞 문구: 연락처] |
 | 주제 키워드 | [선택: 연관 검색어를 넓힐 씨앗 키워드 3~8개, 쉼표로 구분 — 확장 결과는 knowledge/topic-seeds.md] |
-| 이미지 소스 | [ai, stock, photo 중 쉼표 목록(1개 이상) — ai는 .env IMAGE_PROVIDER와 키, stock은 .env PEXELS_API_KEY, photo는 photos/ 폴더] |
+| 이미지 소스 | [ai, stock, photo 중 쉼표 목록(1개 이상) — ai는 .env IMAGE_PROVIDER와 키, stock은 키 불필요(기본 Openverse — Pexels 키가 이미 있으면 .env PEXELS_API_KEY, 선택), photo는 photos/ 폴더] |
 | 이미지 기본 장면 | [선택: AI 이미지 접두와 스톡 검색어에 쓸 영문 장면구 — 비우면 Korean everyday scene] |
 | 배지 문구 | [선택: 표지 좌상단 배지 윗줄(예: 영문 로고 글자) — 비우면 배지를 그리지 않음] |
 | 브랜드 색 | [선택: 표지 배지·제목 패널 색 #RRGGBB — 비우면 중립 기본색] |

@@ -60,7 +60,7 @@
     },
     {
       "name": "naver-blog-autopilot",
-      "description": "네이버 정보성 블로그 글을 주제 리서치 → 초안 → 공신 출처 팩트체크 → SEO → 이미지·표지 → 임시저장까지 자동화하는 플러그인(업종 무관, 발행은 사람이 직접). 설치 후 /naver-blog-autopilot:blog-onboard가 블로그 유형(업체·전문가·개인·브랜드)·톤·마무리 블록·레퍼런스·주제 소스·공신 출처·이미지 소스(AI 생성 Gemini/OpenAI·무료 스톡 Pexels·실사진)를 대화로 맞춰 줍니다.",
+      "description": "네이버 정보성 블로그 글을 주제 리서치 → 초안 → 공신 출처 팩트체크 → SEO → 이미지·표지 → 임시저장까지 자동화하는 플러그인(업종 무관, 발행은 사람이 직접). 설치 후 /naver-blog-autopilot:blog-onboard가 블로그 유형(업체·전문가·개인·브랜드)·톤·마무리 블록·레퍼런스·주제 소스·공신 출처·이미지 소스(AI 생성 Gemini/OpenAI·무료 스톡 Openverse(키 불필요)·실사진)를 대화로 맞춰 줍니다.",
       "source": "./plugins/naver-blog-autopilot"
     }
   ]

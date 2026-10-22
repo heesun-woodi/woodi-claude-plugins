@@ -5,7 +5,7 @@
 | 항목 | 내용 |
 |---|---|
 | 플러그인 | `naver-blog-autopilot` (마켓플레이스 `heesun-woodi/woodi-claude-plugins`, 공개) |
-| 이 가이드의 기준 버전 | 1.1.1 |
+| 이 가이드의 기준 버전 | 1.1.2 |
 | 지원 OS | macOS · Windows(Git for Windows 필요 — 실기 검증 전) |
 | 라이선스 | CC BY-NC 4.0 — 출처를 표기하면 자유롭게 쓰고 고칠 수 있습니다. 유료 서비스·판매 등 상업적 이용은 허용하지 않습니다 |
 | 만든 사람 | heesun-woodi |
@@ -70,7 +70,7 @@
   |---|---|---|
   | AI 생성 — Gemini | 장당 약 $0.04(추정치) | 결제(Billing)가 설정된 Google Cloud 프로젝트의 키 |
   | AI 생성 — OpenAI(GPT 이미지) | OpenAI 요금표 참고 | 결제 수단 등록, 필요하면 조직 인증 |
-  | 무료 스톡 사진 — Pexels | 무료 | [Pexels API 페이지](https://www.pexels.com/api/)에서 키 발급 |
+  | 무료 스톡 사진 — Openverse | 무료 | 키가 필요 없습니다(CC0·퍼블릭 도메인 사진만). Pexels 키가 이미 있는 사람만 Pexels를 골라 쓸 수 있습니다(신규 키 발급 일시 중단) |
   | 내 사진 | 무료 | 작업 폴더의 `photos/`에 넣기 |
 
 - [ ] **한글 폰트(대표 이미지 제목용).** Pretendard 글꼴의 `Pretendard-ExtraBold.otf`·`Pretendard-SemiBold.otf` 두 파일을 설치하면 가장 좋습니다. macOS는 `~/Library/Fonts/`에 넣고, Windows는 파일을 우클릭해 "설치"합니다. 파일은 [Pretendard 배포 페이지](https://github.com/orioncactus/pretendard/releases)에서 받습니다. 없으면 macOS 기본 애플SD산돌고딕, Windows 기본 맑은 고딕 Bold로 대신합니다.
@@ -269,7 +269,7 @@ $env:NAVER_STATE = "$PWD\playwright-state\storage_state.json"; & "$(uv tool dir)
 /naver-blog-autopilot:blog-setup ~/naver-blog-work
 ```
 
-조치 칸이 모두 `-`이면 준비가 끝난 것입니다. 스톡 사진이나 소개 이미지를 쓰지 않기로 했다면 그 줄은 MISSING이어도 됩니다.
+조치 칸이 모두 `-`이면 준비가 끝난 것입니다. 소개 이미지를 쓰지 않기로 했다면 그 줄은 MISSING이어도 됩니다. 무료 스톡 사진은 키가 필요 없어 보통 `STOCK: OK (openverse, 키 불필요)`로 나옵니다.
 
 ---
 
@@ -288,7 +288,8 @@ $env:NAVER_STATE = "$PWD\playwright-state\storage_state.json"; & "$(uv tool dir)
 | 네이버 세션 | 로그인 필요 | 4-6단계 로그인 |
 | 네이버 세션 | 다른 계정 로그인 | 글을 올릴 블로그의 계정으로 4-6단계를 다시 합니다 |
 | 블로그 ID | MISSING · MISMATCH | 셋업·온보딩이 물으면 블로그 ID를 답합니다 |
-| 이미지 AI 키 · 스톡 사진 키 | 없음 · MISSING | 온보딩의 이미지 소스 단계에서 연결합니다. 쓰지 않는 소스는 MISSING이어도 됩니다 |
+| 이미지 AI 키 | 없음 · MISSING | 온보딩의 이미지 소스 단계에서 연결합니다. AI 생성을 쓰지 않으면 MISSING이어도 됩니다 |
+| 무료 스톡 사진 | OK (openverse, 키 불필요) | 할 일 없음. MISSING·CONFLICT가 나오면 `.env`의 `STOCK_PROVIDER=` 줄을 `openverse`로 고치거나 그 줄을 지웁니다. 스톡 사진을 쓰지 않으면 무시해도 됩니다 |
 | business-profile.md 필수 행 | MISSING | 첫 셋업에서는 정상입니다. 온보딩이 채웁니다 |
 | 한글 폰트 | MISSING | 3장 준비물의 한글 폰트 |
 | photos/business-intro.png | MISSING | 글 끝에 소개 이미지를 넣기로 했을 때만 조치합니다 |
@@ -316,7 +317,7 @@ $env:NAVER_STATE = "$PWD\playwright-state\storage_state.json"; & "$(uv tool dir)
 | 7 | 레퍼런스 글 주소 붙여넣기(0~6개) | 준비물에서 모은 주소. 실제로 있는 블로그인지 확인하고 글 모양을 측정합니다 |
 | 8 | 주제 키워드 3~8개 | 네이버 연관 검색어로 넓혀 주제 후보의 씨앗으로 저장합니다 |
 | 9 | 주제 소스·공신 출처 확인 | 사실 검토에 쓸 공공기관·법령 출처 후보를 제안합니다 |
-| 10 | 이미지 소스 — AI 생성 / 무료 스톡 사진 / 내 사진 | 고른 소스의 키 발급 안내가 나옵니다(5-3) |
+| 10 | 이미지 소스 — AI 생성 / 무료 스톡 사진(키 없이 바로) / 내 사진 | AI 생성을 고르면 키 발급 안내가 나옵니다(5-3). 무료 스톡 사진은 키 없이 바로 씁니다 |
 | 11 | 금칙어·꼭 지켜야 할 점 | 없으면 「없음」 |
 
 마지막에 채운 값을 표로 보여 주고 "이대로 저장할까요?"를 묻습니다. 저장한 뒤 디자인 시스템을 만들고, 남은 준비물(로그인·폰트 등)을 알려 줍니다.
@@ -337,7 +338,7 @@ $env:NAVER_STATE = "$PWD\playwright-state\storage_state.json"; & "$(uv tool dir)
 
 ### 5-3. 이미지 키 넣기
 
-온보딩에서 고른 소스의 발급 안내가 화면에 나옵니다. 발급 절차의 자세한 내용은 [이미지 소스 연동 안내](https://github.com/heesun-woodi/woodi-claude-plugins/blob/main/plugins/naver-blog-autopilot/skills/blog-onboarding/references/image-setup.md)에 있습니다.
+무료 스톡 사진은 키가 필요 없습니다. 이 절은 AI 생성 키(그리고 Pexels 키가 이미 있는 경우)에만 해당합니다. 온보딩에서 고른 소스의 발급 안내가 화면에 나옵니다. 발급 절차의 자세한 내용은 [이미지 소스 연동 안내](https://github.com/heesun-woodi/woodi-claude-plugins/blob/main/plugins/naver-blog-autopilot/skills/blog-onboarding/references/image-setup.md)에 있습니다.
 
 발급받은 키는 작업 폴더의 `.env` 파일에 넣습니다. 아래 명령으로 `.env`를 엽니다.
 
@@ -359,16 +360,15 @@ notepad "$HOME\naver-blog-work\.env"
 
 ```text
 GEMINI_API_KEY=AIzaSy...
-PEXELS_API_KEY=563492ad...
 ```
 
-키는 괄호·따옴표·공백 없이 키 글자만 넣습니다.
+키는 괄호·따옴표·공백 없이 키 글자만 넣습니다. Pexels 키가 이미 있는 분만(선택) `PEXELS_API_KEY=` 줄에 넣으면 무료 스톡 사진을 Pexels에서 받습니다. Pexels는 신규 키 발급을 일시 중단했으니, 키가 없으면 그 줄은 비워 둡니다(키 없이 Openverse를 씁니다).
 
 저장한 뒤 온보딩 질문에 `넣었어요 — 확인해 주세요`를 고르면 비용 없이 키를 확인합니다(이미지를 만들지 않습니다).
 
 - **Gemini**: 결제가 설정되지 않은 무료 키는 확인은 통과해도 이미지 생성에서 실패(429)합니다.
 - **OpenAI**: 키 확인이 통과해도 이미지 생성에서 403이 나면 조직 인증(Verify Organization)이 필요한 것입니다.
-- **Pexels**: 무료이고, 사진 출처는 플러그인이 기록해 둡니다.
+- **무료 스톡 사진**: 키가 필요 없습니다. Openverse의 CC0·퍼블릭 도메인 사진만 받고, 사진 출처는 플러그인이 기록해 둡니다. Pexels 키가 이미 있으면 Pexels를 씁니다(선택).
 
 ---
 
@@ -495,7 +495,7 @@ Claude 입력창에서:
 /naver-blog-autopilot:blog-setup ~/naver-blog-work
 ```
 
-1.1.0에서 올리는 경우, 이미 채워진 디자인 시스템은 그대로 쓰면 됩니다. 디자인 시스템을 아직 만들지 않았다면 온보딩에서 「레퍼런스·디자인 시스템」을 골라 한 번 만듭니다. 1.0.0에서 올리는 경우는 10장 FAQ 7을 봅니다.
+1.1.1에서 올리는 경우, 위처럼 셋업을 다시 실행하면 끝입니다. 무료 스톡 사진은 키 없이 Openverse를 쓰고, Pexels 키가 이미 `.env`에 있으면 자동으로 Pexels를 계속 씁니다. 1.1.0에서 올리는 경우, 이미 채워진 디자인 시스템은 그대로 쓰면 됩니다. 디자인 시스템을 아직 만들지 않았다면 온보딩에서 「레퍼런스·디자인 시스템」을 골라 한 번 만듭니다. 1.0.0에서 올리는 경우는 10장 FAQ 7을 봅니다.
 
 ---
 
@@ -506,7 +506,7 @@ Claude 입력창에서:
 | AI 이미지 — Gemini | 장당 약 $0.04(추정치 — 정확한 단가는 [Google 요금표](https://ai.google.dev/pricing)). 다시 만들기도 과금됩니다 |
 | AI 이미지 — OpenAI | [OpenAI 요금표](https://openai.com/api/pricing/)에서 확인 |
 | 대표 이미지 배경 | AI로 만들면 이미지 1장 값, 내 사진이나 스톡 사진 배경이면 무료 |
-| 스톡 사진 — Pexels | 무료 |
+| 무료 스톡 사진 — Openverse(기본) · Pexels(선택) | 무료(요청 한도만 있음) |
 | 대표 이미지 제목 합성 | 무료(내 컴퓨터에서 처리) |
 | 키 확인 | 무료(이미지를 만들지 않음) |
 | 네이버 임시저장·법령 조회 | 무료 |
@@ -538,7 +538,7 @@ Claude 입력창에서:
 | "다른 계정으로 로그인"(exit 21) | 글을 올릴 블로그가 아닌 계정으로 로그인함 | 그 블로그 계정으로 4-6단계 로그인을 다시 함 |
 | 이미지 생성이 429로 멈춤(Gemini) | 결제가 설정되지 않은 무료 키 | Google Cloud 프로젝트에 결제 설정 후 다시 |
 | 이미지 생성이 403(OpenAI) | 조직 인증이 안 됨 | OpenAI 조직 설정에서 Verify Organization |
-| 스톡 사진 자리가 `보류` | Pexels 키 없음 또는 검색 결과 없음 | 키를 넣거나, 게이트 3에서 `다른 사진으로(검색어 수정)` |
+| 스톡 사진 자리가 `보류` | 검색 결과 없음 · 사진 받기 실패 · 요청 한도(한꺼번에 많이 받음) · `STOCK_PROVIDER` 설정(진단 `STOCK: MISSING`·`CONFLICT`) | 게이트 3에서 `다른 사진으로(검색어 수정)` — 영문 일반 사물 2~3단어로. 요청 한도면 잠시 뒤 `/naver-blog-autopilot:blog-run resume <글 번호>`. 설정 문제면 `.env`의 `STOCK_PROVIDER=` 줄을 `openverse`로 고치거나 지움 |
 | "표지 재생성 필요"로 멈춤 | 게이트 2에서 제목이 바뀜 | `blog-run`이 표지 제목만 다시 만들고 이어 갑니다(비용 없음) |
 | "대표이미지 지정 실패" 경고 | 임시저장은 됐지만 대표 지정 확인 실패 | 네이버 임시저장 글에서 첫 사진을 직접 대표로 지정 |
 | "장소 카드 확인 필요" 경고 | 지도 검색 1번 결과가 우리 업체가 아닐 수 있음 | 미리보기에서 지도 확인. 다르면 프로필의 `장소 검색어`를 `<업체명> <지역>`으로 좁힘 |
@@ -561,7 +561,7 @@ Windows에서 이모지가 깨지거나 멈추면 4-2단계의 `setx PYTHONUTF8 
 있습니다. 온보딩의 말투 질문에서 `해요체(친근)`를 고르면 됩니다. 개인 유형은 해요체가 기본값입니다.
 
 **3. 이미지 키가 없으면 못 쓰나요?**
-시작은 할 수 있습니다. 키가 없는 소스의 이미지 자리는 `보류`로 두고 나머지(내 사진 등)로 채웁니다. 다만 이미지가 정해진 최소 개수보다 적으면 임시저장 전에 멈춥니다. 키 없이 시작하면 대표 이미지 배경에도 `photos/`의 내 사진이 필요합니다. 비용 없이 시작하려면 무료인 Pexels 키를 받은 뒤, 온보딩을 다시 실행해 「이미지 소스」에서 `무료 스톡 사진(Pexels)`을 고르세요(개인 유형 말고는 기본값에 스톡 사진이 없습니다).
+시작은 할 수 있습니다. 키가 없는 소스의 이미지 자리는 `보류`로 두고 나머지(내 사진 등)로 채웁니다. 다만 이미지가 정해진 최소 개수보다 적으면 임시저장 전에 멈춥니다. 키 없이 시작하면 대표 이미지 배경에도 `photos/`의 내 사진이 필요합니다. 비용 없이 시작하려면 온보딩을 다시 실행해 「이미지 소스」에서 `무료 스톡 사진(키 없이 바로)`을 고르세요. Pexels 키는 필요 없습니다(개인 유형 말고는 기본값에 스톡 사진이 없습니다). 지명·한국어 간판 같은 한국 장면은 스톡 사진에 거의 없어서, 그런 자리는 AI 생성이나 내 사진으로 채웁니다.
 
 **4. 이미지는 어떤 것이 들어가나요?**
 본문 이미지에는 글자·로고·얼굴 클로즈업이 들어가지 않게 만듭니다. 홍보 글에는 내 사진만 씁니다. 대표 이미지(표지)는 배경 위에 글 제목을 얹어 만듭니다.
@@ -632,5 +632,5 @@ naver-blog-work/
 ## 부록 C. 더 읽을거리
 
 - [플러그인 README](https://github.com/heesun-woodi/woodi-claude-plugins/blob/main/plugins/naver-blog-autopilot/README.md) — 전체 동작, 종료 코드, 설계 이유
-- [이미지 소스 연동 안내](https://github.com/heesun-woodi/woodi-claude-plugins/blob/main/plugins/naver-blog-autopilot/skills/blog-onboarding/references/image-setup.md) — Gemini·OpenAI·Pexels 키 발급
+- [이미지 소스 연동 안내](https://github.com/heesun-woodi/woodi-claude-plugins/blob/main/plugins/naver-blog-autopilot/skills/blog-onboarding/references/image-setup.md) — Gemini·OpenAI 키 발급, 무료 스톡 사진(Openverse 기본·Pexels 선택) 설정
 - [naver-blog-cli](https://github.com/spegas/naver-blog-cli) — 네이버 임시저장을 맡는 외부 도구

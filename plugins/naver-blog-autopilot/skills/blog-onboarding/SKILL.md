@@ -1,6 +1,6 @@
 ---
 name: blog-onboarding
-description: Use when the person who installed naver-blog-autopilot wants the plugin fitted to their own blog through a short conversation — e.g. "온보딩", "온보딩 시작", "내 블로그에 맞춰 설정", "내 블로그에 맞게 세팅해줘", "프로필 채우기", "업체 정보 채워줘", "blog-onboard", "set up my blog profile", "onboard my blog", and when /naver-blog-autopilot:blog-setup or /naver-blog-autopilot:blog-onboard hands over because check_profile.py is not OK. Asks the blog type (업체·전문가·개인·브랜드) and loads type defaults, then fills knowledge/business-profile.md (v1.1 rows such as 블로그 유형·톤·마무리 블록·주제 키워드·이미지 소스), knowledge/source-blogs.json (own_blog·design_references·topic_sources), knowledge/official-sources.md and knowledge/topic-seeds.md with existing values preserved, links image sources (AI key·Pexels·photos/) without ever receiving key values, and finally calls blog-design-system. Runs in the main session. Do NOT use for installing tools or logging in to Naver (use /naver-blog-autopilot:blog-setup), for writing a post (use /naver-blog-autopilot:blog-run), for editing an existing design system only (use blog-design-system 갱신 모드), or for recording feedback (use /naver-blog-autopilot:blog-feedback).
+description: Use when the person who installed naver-blog-autopilot wants the plugin fitted to their own blog through a short conversation — e.g. "온보딩", "온보딩 시작", "내 블로그에 맞춰 설정", "내 블로그에 맞게 세팅해줘", "프로필 채우기", "업체 정보 채워줘", "blog-onboard", "set up my blog profile", "onboard my blog", and when /naver-blog-autopilot:blog-setup or /naver-blog-autopilot:blog-onboard hands over because check_profile.py is not OK. Asks the blog type (업체·전문가·개인·브랜드) and loads type defaults, then fills knowledge/business-profile.md (v1.1 rows such as 블로그 유형·톤·마무리 블록·주제 키워드·이미지 소스), knowledge/source-blogs.json (own_blog·design_references·topic_sources), knowledge/official-sources.md and knowledge/topic-seeds.md with existing values preserved, links image sources (AI key·free stock photos via Openverse with no key, or Pexels only if a key already exists·photos/) without ever receiving key values, and finally calls blog-design-system. Runs in the main session. Do NOT use for installing tools or logging in to Naver (use /naver-blog-autopilot:blog-setup), for writing a post (use /naver-blog-autopilot:blog-run), for editing an existing design system only (use blog-design-system 갱신 모드), or for recording feedback (use /naver-blog-autopilot:blog-feedback).
 allowed-tools: Read, Write, Edit, Glob, Bash(python3 scripts/check_profile.py:*), Bash(python3 scripts/verify_blogs.py:*), Bash(python3 scripts/keyword_expand.py:*), Bash(python3 scripts/fetch_post.py:*), Bash(python3 scripts/fetch_posts.py:*), Bash(python3 scripts/check_image_key.py:*), Bash(awk:*), Bash(cat:*), Bash(ls:*), Bash(mkdir -p work/design-system), Bash(python3 -m json.tool:*), Bash(rm -f .env.tmp), Bash(tr:*), Bash(echo:*), AskUserQuestion, Skill
 ---
 
@@ -57,7 +57,7 @@ allowed-tools: Read, Write, Edit, Glob, Bash(python3 scripts/check_profile.py:*)
   ```
   `.env` 상태(키 값은 출력하지 않음 — 블로그 ID·제공자 이름만 보이고 키는 OK/MISSING만):
   ```bash
-  awk -v sq="'" 'BEGIN { split("NAVER_BLOG_ID IMAGE_PROVIDER GEMINI_API_KEY OPENAI_API_KEY PEXELS_API_KEY", N, " ") }
+  awk -v sq="'" 'BEGIN { split("NAVER_BLOG_ID IMAGE_PROVIDER GEMINI_API_KEY OPENAI_API_KEY STOCK_PROVIDER PEXELS_API_KEY", N, " ") }
   { sub(/\r$/, ""); l = $0; sub(/^[ \t]+/, "", l); sub(/^export[ \t]+/, "", l)
     i = index(l, "="); if (i == 0) next
     k = substr(l, 1, i - 1); sub(/[ \t]+$/, "", k)
@@ -65,14 +65,15 @@ allowed-tools: Read, Write, Edit, Glob, Bash(python3 scripts/check_profile.py:*)
     if (q == "\"" || q == sq) { v = substr(v, 2); j = index(v, q); if (j) v = substr(v, 1, j - 1); if (v ~ /^[ \t]*$/) v = "" }
     else { if (substr(v, 1, 1) == "#") v = ""; sub(/[ \t]+#.*$/, "", v); sub(/[ \t]+$/, "", v) }
     if (v != "" && !(k in got)) got[k] = v }
-  END { for (i = 1; i <= 5; i++) { k = N[i]
+  END { for (i = 1; i <= 6; i++) { k = N[i]
     if (!(k in got)) { print k ": MISSING"; continue }
     v = got[k]
     if (k == "NAVER_BLOG_ID") print k ": " (v ~ /^[A-Za-z0-9_-]+$/ ? v : "INVALID")
     else if (k == "IMAGE_PROVIDER") print k ": " (tolower(v) ~ /^(gemini|openai)$/ ? tolower(v) : "INVALID")
+    else if (k == "STOCK_PROVIDER") print k ": " (tolower(v) ~ /^(openverse|pexels)$/ ? tolower(v) : "INVALID")
     else print k ": OK (.env)" } }' .env
   ```
-  (값 읽기 규칙은 blog-setup 2단계 `ENVGET`과 같다. `.env`가 없으면 blog-setup 3단계가 만들므로 blog-setup을 먼저 안내한다.)
+  (값 읽기 규칙은 blog-setup 2단계 `ENVGET`과 같다. `STOCK_PROVIDER: MISSING`·`PEXELS_API_KEY: MISSING`은 정상이다 — 무료 스톡 사진은 기본이 Openverse라 키가 필요 없다. `.env`가 없으면 blog-setup 3단계가 만들므로 blog-setup을 먼저 안내한다.)
   그리고 Read로 `knowledge/business-profile.md`·`knowledge/source-blogs.json`·`knowledge/official-sources.md`·`knowledge/topic-seeds.md`(있으면)를 읽는다.
 - **분기**:
   - `profile: NOFILE` → blog-setup 먼저 안내 후 중단.
@@ -210,14 +211,14 @@ allowed-tools: Read, Write, Edit, Glob, Bash(python3 scripts/check_profile.py:*)
 
 ## O9 이미지 소스 연동 — Q8 · Q9 · Q10
 
-- **목적**: `이미지 소스`를 정하고 소스마다 키·폴더를 준비시킨다. 키 값은 받지도 보지도 않는다.
+- **목적**: `이미지 소스`를 정하고 소스마다 키·폴더를 준비시킨다(무료 스톡 사진은 키가 필요 없다). 키 값은 받지도 보지도 않는다.
 - **먼저 현재 상태 확인**(비용 0 조회, 키 값은 출력되지 않음):
   ```bash
   python3 scripts/check_image_key.py 2>&1 | tr -d '\r'; echo "exit=${PIPESTATUS[0]}"
   python3 scripts/check_image_key.py --stock 2>&1 | tr -d '\r'; echo "exit=${PIPESTATUS[0]}"
   ls photos 2>/dev/null | awk 'tolower($0) ~ /\.(jpe?g|png|webp|heic)$/ && $0 != "business-intro.png" { n++ } END { print "photos: " n + 0 "장" }'
   ```
-- **질문 Q8**: question-bank O9 Q8(multiSelect, header `이미지 소스`). 유형 기본값(업체 ai+photo, 개인 ai+stock, 전문가·브랜드 ai)에 (기본), 이미 키 확인이 exit 0인 소스는 라벨 끝에 `— 키 확인됨`.
+- **질문 Q8**: question-bank O9 Q8(multiSelect, header `이미지 소스`). 유형 기본값(업체 ai+photo, 개인 ai+stock, 전문가·브랜드 ai)에 (기본), 이미 확인이 exit 0인 소스는 라벨 끝에 `— 키 확인됨`(스톡은 `— 확인됨`).
 - **분기 — AI(`ai`)**:
   - `check_image_key.py` exit 0 → 묻지 않고 출력 줄만 보여 준다.
   - 아니면 Q9(header `AI 제공자`). `Gemini`·`OpenAI` → `.env`의 `IMAGE_PROVIDER=` 줄**만** 쓴다(blog-setup 3-1과 같은 awk 한 줄, `<gemini 또는 openai>` 자리에 고른 값 — 해당 줄만 교체·없으면 추가, `cat >`로 권한·심링크 보존, 키 줄은 보지 않음. 성공하면 "IMAGE_PROVIDER=<값> 저장"이라고 알린다):
@@ -226,9 +227,9 @@ allowed-tools: Read, Write, Edit, Glob, Bash(python3 scripts/check_profile.py:*)
     ```
     이어서 image-setup.md 1-1(Gemini) 또는 1-2(OpenAI)와 0절(.env 여는 명령·"키는 채팅에 붙여넣지 말고 .env에")을 보여 준다.
   - `아직 없음 — 나중에` → `.env`를 건드리지 않고 image-setup.md 4절 문구. `ai`는 `이미지 소스`에 그대로 남긴다(키를 넣으면 바로 쓰임).
-- **분기 — 스톡(`stock`)**: `--stock` exit 0 → 출력 줄만. 아니면 image-setup.md 2절(https://www.pexels.com/api/ 발급 → `.env`에 `PEXELS_API_KEY=` 한 줄) + 0절.
+- **분기 — 스톡(`stock`)**: **키 안내 없이** 진행한다 — 위 `python3 scripts/check_image_key.py --stock` 결과(기본 openverse 확인)만 본다. exit 0 → 출력 줄(`스톡 확인: openverse 사용 가능 (키 불필요)` 또는 `스톡 키 확인: pexels 사용 가능 (<source>)`)만 보여 주고, openverse면 한 줄 덧붙인다: "Pexels 키가 이미 있는 분만 `.env`에 `PEXELS_API_KEY=` 한 줄을 넣으면 Pexels를 씁니다(선택 — Pexels는 신규 키 발급 일시 중단)." exit 2(`STOCK_PROVIDER` 값 오류 · `STOCK_PROVIDER=pexels`인데 키 없음)·3(pexels 키 거부) → image-setup.md 2-3절의 exit별 안내 + 0절. exit 5(네트워크·요청 한도) → 2-3절 안내만(키 문제 아님). 어느 경우도 진행은 막지 않는다.
 - **분기 — 내 사진(`photo`)**: image-setup.md 3절 + 위 `photos: n장`. 0장이면 "사진이 0장입니다 — 글을 쓰기 전에 photos/에 넣어 두세요" 한 줄(질문 아님).
-- **질문 Q10**(안내를 보여 준 키가 하나라도 있으면 한 번 — AI·Pexels 함께): question-bank O9 Q10(header `키 확인`). `넣었어요` → 안내한 소스만 다시 확인한다(AI: `python3 scripts/check_image_key.py …`, 스톡: `python3 scripts/check_image_key.py --stock …`) → image-setup.md 1-3·2절의 exit별 안내. OK가 아니면 원인 안내 뒤 **한 번만** 다시 묻는다(재확인). 그래도 OK가 아니거나 `나중에 넣을게요`면 image-setup.md 4절 문구로 넘어간다 — 진행은 막지 않는다.
+- **질문 Q10**(AI 키 안내나 스톡 `.env` 안내(`--stock` exit 2·3)를 보여 준 소스가 하나라도 있으면 한 번 — 함께): question-bank O9 Q10(header `키 확인`). `넣었어요` → 안내한 소스만 다시 확인한다(AI: `python3 scripts/check_image_key.py …`, 스톡: `python3 scripts/check_image_key.py --stock …`) → image-setup.md 1-3·2-3절의 exit별 안내. OK가 아니면 원인 안내 뒤 **한 번만** 다시 묻는다(재확인). 그래도 OK가 아니거나 `나중에 넣을게요`면 image-setup.md 4절 문구로 넘어간다 — 진행은 막지 않는다.
 - **이미지 기본 장면**(질문 없음): 업체·전문가·브랜드는 메인이 `상품·서비스` 첫 항목으로 영문 장면구 2~6단어를 제안한다(예: `Korean neighborhood bicycle repair shop` 꼴 — 글자·로고·얼굴을 부르는 말은 넣지 않음). 개인은 비운다(기본 `Korean everyday scene`). O11 저장 확인 표에 보여 주고 거기서 고칠 수 있다.
 - **쓰는 파일·행**: `.env` `IMAGE_PROVIDER=` 줄(즉시, AI 제공자를 고른 경우만) · (O11) `business-profile.md` `이미지 소스`(`ai`, `stock`, `photo` 순서로 고른 것만, 쉼표+공백) · `이미지 기본 장면`.
 
@@ -314,7 +315,7 @@ allowed-tools: Read, Write, Edit, Glob, Bash(python3 scripts/check_profile.py:*)
 | Q7 | O7b·O8 | AUQ | 연관 검색어·주제 소스·공신 출처 저장 | 항상 |
 | Q8 | O9 | AUQ | 이미지 소스 | 항상 |
 | Q9 | O9 | AUQ | AI 제공자 | `ai`를 골랐고 키 확인이 OK가 아닐 때 |
-| Q10 | O9 | AUQ | 키 넣었는지 확인 | 키 안내를 보여 준 소스가 있을 때 |
+| Q10 | O9 | AUQ | 키 넣었는지 확인 | AI 키 안내 또는 스톡 `.env` 안내(`--stock` exit 2·3)를 보여 준 소스가 있을 때 |
 | — | O2 · O7a · O7b · O10 | 자유 입력 | 기본 정보 · 레퍼런스 주소 · 주제 키워드 · 금칙어 | 각 1회 |
 | 제외 | O0 | 재실행 | 그대로/항목만 고르기/전부 다시 (+ 묶음 고르기) | 이미 채워진 프로필 |
 | 제외 | O2·O7a·O7b·O10·O11·O9 | 재확인 | 맞아요/고칠게요 · 형식 오류 재질문 · 키 재확인 1회 · 저장 확인 · check_profile 재질문 1회 | — |

@@ -1,5 +1,5 @@
 ---
-description: 네이버 블로그 자동화 작업 폴더를 준비하고 환경(uv·Python·Playwright·naver-blog-cli·네이버 로그인 세션·이미지 AI 키(Gemini 또는 OpenAI)·스톡 사진 키(Pexels)·한글 폰트·업체소개 이미지)을 진단합니다. 프로필이 비어 있으면 대화형 온보딩(blog-onboard)으로 이어 줍니다.
+description: 네이버 블로그 자동화 작업 폴더를 준비하고 환경(uv·Python·Playwright·naver-blog-cli·네이버 로그인 세션·이미지 AI 키(Gemini 또는 OpenAI)·무료 스톡 사진 제공자(Openverse — 키 불필요, 이미 키가 있으면 Pexels)·한글 폰트·업체소개 이미지)을 진단합니다. 프로필이 비어 있으면 대화형 온보딩(blog-onboard)으로 이어 줍니다.
 argument-hint: "[작업 폴더 경로 (선택, 기본 현재 폴더)]"
 allowed-tools: Bash, Read, Write, Glob, Skill, AskUserQuestion
 ---
@@ -144,11 +144,21 @@ case "$IP" in
   "") if [ -n "$G_SRC" ]; then echo "IMAGE_KEY: OK (gemini, $G_SRC)"; elif [ -n "$O_SRC" ]; then echo "IMAGE_KEY: OK (openai, $O_SRC)"; else echo "IMAGE_KEY: MISSING"; fi ;;
   *) echo "IMAGE_KEY: CONFLICT (IMAGE_PROVIDER 값이 gemini/openai가 아님 — 키를 이 줄에 잘못 넣었는지 확인)" ;;
 esac
-# 스톡 사진 키(Pexels): 존재 여부만(값 출력 금지). .env(ENVGET) → 없으면 환경변수
+# 무료 스톡 제공자: STOCK_PROVIDER(openverse|pexels, 선택) > PEXELS_API_KEY가 있으면 pexels > 둘 다 없으면 openverse(키 불필요).
+# fetch_stock.py·check_image_key.py --stock과 같은 규칙. 키는 존재 여부만 보고, STOCK_PROVIDER는 openverse/pexels와 비교만 한다 — 어떤 값도 출력하지 않는다.
+# 항목마다 .env(ENVGET) → 없으면 환경변수.
 P_SRC=""
 [ -f .env ] && awk -v n=PEXELS_API_KEY -v show=0 -v sq="'" "$ENVGET" .env && P_SRC=".env"
 [ -z "$P_SRC" ] && [ -n "$(printenv PEXELS_API_KEY 2>/dev/null | tr -d '[:space:]')" ] && P_SRC="env"
-[ -n "$P_SRC" ] && echo "PEXELS_KEY: OK ($P_SRC)" || echo "PEXELS_KEY: MISSING"
+SP=""
+[ -f .env ] && SP="$(awk -v n=STOCK_PROVIDER -v show=1 -v sq="'" "$ENVGET" .env | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')"
+[ -z "$SP" ] && SP="$(printf '%s' "${STOCK_PROVIDER:-}" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')"
+[ -z "$SP" ] && { [ -n "$P_SRC" ] && SP="pexels" || SP="openverse"; }
+case "$SP" in
+  openverse) echo "STOCK: OK (openverse, 키 불필요)" ;;
+  pexels) [ -n "$P_SRC" ] && echo "STOCK: OK (pexels, $P_SRC)" || echo "STOCK: MISSING (STOCK_PROVIDER=pexels인데 PEXELS_API_KEY 없음)" ;;
+  *) echo "STOCK: CONFLICT (STOCK_PROVIDER 값이 openverse/pexels가 아님)" ;;
+esac
 [ -f knowledge/design-system.md ] && echo "design-system.md: OK" || echo "design-system.md: MISSING (경고만, 오류 아님)"
 echo "--- 표지·마무리 자산 ---"
 # 글꼴: macOS(Pretendard·AppleSDGothicNeo) / Windows(Pretendard 사용자·시스템 설치, 맑은 고딕 Bold) — LAD·WD는 위 OS 절에서 cygpath로 변환됨
@@ -202,14 +212,14 @@ else echo "profile: SKIPPED (scripts/check_profile.py 없음 — 플러그인을
 `IMAGE_KEY_CHECK`가 `NO_PYTHON`(exit 127)·`PYTHON_STUB`(Windows Store 별칭, exit 9009 — bash에서는 49)이면 python3 문제다(4단계 python3 항목) — 키 문제로 안내하지 않는다. `ERROR`(스크립트 없음 등)도 키 문제가 아니다.
 `profile:` 줄은 4단계 표의 「business-profile.md 필수 행」에 넣는다. 첫 셋업에서는 템플릿 그대로라 `MISSING`이 정상이다.
 
-## 3-1. 이미지 소스 진단 요약 (AI 키·스톡 사진 키)
+## 3-1. 이미지 소스 진단 요약 (AI 키·무료 스톡 사진)
 
-이미지 생성은 **Gemini**(Google AI Studio) 또는 **OpenAI**(GPT 이미지) 중 담당자가 가진 키 하나로 한다. 어느 쪽을 쓸지는 `IMAGE_PROVIDER`(gemini|openai, 선택) > `GEMINI_API_KEY` > `OPENAI_API_KEY` 순으로 정한다. 읽는 곳 — 키: API 키(GEMINI_API_KEY/OPENAI_API_KEY)가 든 첫 .env 파일의 값. 어느 파일에도 없으면 환경변수. IMAGE_PROVIDER·IMAGE_MODEL: 키를 찾은 .env의 값(그 파일에 없으면 미지정). 키를 환경변수에서 읽을 때는 항목마다 cwd .env → 환경변수 중 처음 값이 있는 곳. `IMAGE_PROVIDER`가 정한 제공자의 키가 비어 있거나 값이 gemini/openai가 아니면 오류(`CONFLICT`)다. 무료 스톡 사진은 `PEXELS_API_KEY`(프로필 `이미지 소스`에 `stock`이 있을 때만 필요)다.
+이미지 생성은 **Gemini**(Google AI Studio) 또는 **OpenAI**(GPT 이미지) 중 담당자가 가진 키 하나로 한다. 어느 쪽을 쓸지는 `IMAGE_PROVIDER`(gemini|openai, 선택) > `GEMINI_API_KEY` > `OPENAI_API_KEY` 순으로 정한다. 읽는 곳 — 키: API 키(GEMINI_API_KEY/OPENAI_API_KEY)가 든 첫 .env 파일의 값. 어느 파일에도 없으면 환경변수. IMAGE_PROVIDER·IMAGE_MODEL: 키를 찾은 .env의 값(그 파일에 없으면 미지정). 키를 환경변수에서 읽을 때는 항목마다 cwd .env → 환경변수 중 처음 값이 있는 곳. `IMAGE_PROVIDER`가 정한 제공자의 키가 비어 있거나 값이 gemini/openai가 아니면 오류(`CONFLICT`)다. 무료 스톡 사진은 기본이 **Openverse**(키 불필요, CC0·퍼블릭 도메인만)다. Pexels는 이미 키가 있을 때만 선택해 쓴다(신규 키 발급 일시 중단) — `STOCK_PROVIDER`(openverse|pexels, 선택)가 있으면 그 값, 없고 `PEXELS_API_KEY`가 있으면 pexels, 둘 다 없으면 openverse. `STOCK_PROVIDER=pexels`인데 키가 없으면 `MISSING`, 값이 openverse/pexels가 아니면 `CONFLICT`다(다른 제공자로 넘어가지 않는다).
 
-이 커맨드는 **진단만** 한다. 질문하지 않는다. 2단계 `IMAGE_KEY`·`PEXELS_KEY`와 3단계 `IMAGE_KEY_CHECK`를 4단계 표의 이미지 행에 그대로 넣는다.
+이 커맨드는 **진단만** 한다. 질문하지 않는다. 2단계 `IMAGE_KEY`·`STOCK`과 3단계 `IMAGE_KEY_CHECK`를 4단계 표의 이미지 행에 그대로 넣는다.
 
 - `IMAGE_KEY`가 `OK`면: 4단계 표에 `IMAGE_KEY_CHECK` 결과를 넣는다(`REJECTED`·`NO_MODEL`이면 그 제공자 원인 안내를 아래 정본에서 함께).
-- `MISSING`·`CONFLICT`이거나 `PEXELS_KEY`가 `MISSING`이면: 제공자 선택·발급 안내·「넣었어요」 확인은 **온보딩 O9에서 진행** — `${CLAUDE_PLUGIN_ROOT}/skills/blog-onboarding/references/image-setup.md` 참고(이미지 키 안내 문구의 정본. 이 커맨드에는 같은 문구를 두지 않는다). 5단계에서 온보딩을 제안한다. 키가 없어도 셋업은 실패가 아니다(키 없음 모드).
+- `IMAGE_KEY`가 `MISSING`·`CONFLICT`이거나 `STOCK`이 `MISSING`·`CONFLICT`이면: 제공자 선택·발급 안내·「넣었어요」 확인은 **온보딩 O9에서 진행** — `${CLAUDE_PLUGIN_ROOT}/skills/blog-onboarding/references/image-setup.md` 참고(이미지 키 안내 문구의 정본. 이 커맨드에는 같은 문구를 두지 않는다). 5단계에서 온보딩을 제안한다. 키가 없어도 셋업은 실패가 아니다(키 없음 모드).
 - `IMAGE_KEY_CHECK`가 `NO_PYTHON`·`PYTHON_STUB`·`ERROR`면 키 문제가 아니다(3단계 설명).
 
 `.env`의 `IMAGE_PROVIDER=` 줄 쓰기 블록(참고 — **온보딩 O9가 이 블록을 그대로 쓴다**. 사용자가 이 커맨드에서 제공자만 바로 바꿔 달라고 할 때만 실행한다. 키 줄은 들여다보거나 출력하지 않는다):
@@ -258,7 +268,7 @@ rm -f .env.tmp   # 성공·실패와 무관하게 임시 파일 정리
 | naver-blog-cli | OK / MISSING | 아래 명령 |
 | 네이버 세션 | 정상 / 로그인 필요 / 다른 계정 로그인 / blogId 없음 | 아래 로그인 절차. **blogId 없음**(`SKIPPED (blogId 없음 …)`)이면 3-2단계에서 `NAVER_BLOG_ID`를 넣은 뒤 이 커맨드를 다시 실행하라고 안내(첫 셋업에서는 `.env`·`knowledge/`가 아직 없어 이렇게 나오는 것이 정상). **다른 계정 로그인**(`WRONG_ACCOUNT` — 세션은 살아 있지만 글쓰기 화면이 다른 블로그로 이동)이면 출력의 이동 주소를 보여 주고 `<blogId>` 블로그 계정으로 로그인 절차를 다시 하라고 안내(기존 세션 파일을 덮어씀). 블로그 주소가 틀렸다면 `knowledge/source-blogs.json`의 `own_blog`를 고친다 |
 | 블로그 ID (`.env` `NAVER_BLOG_ID` = `own_blog.blogId`) | OK / MISSING / MISMATCH | 3-2단계. `own_blog.blogId: MISSING`이면 `knowledge/source-blogs.json`의 `own_blog.blogId`를 `.env`와 같은 값으로 채우라고 안내(`/naver-blog-autopilot:blog-run`은 둘 중 하나가 없거나 다르면 시작하지 않는다) |
-| 이미지 AI 키 (Gemini 또는 OpenAI) · 스톡 사진 키 (Pexels) | AI: OK (<provider>, 확인됨) / 없음(키 없음 모드) / CONFLICT / 거부 / 모델 없음 / 네트워크 · Pexels: OK (.env\|env) / MISSING | 2단계 `IMAGE_KEY`·`PEXELS_KEY`, 3단계 `IMAGE_KEY_CHECK`. 없음·CONFLICT·거부면 온보딩 O9(`/naver-blog-autopilot:blog-onboard`)에서 연동 — 안내 정본 `skills/blog-onboarding/references/image-setup.md`. Pexels MISSING은 프로필 `이미지 소스`에 `stock`이 있을 때만 조치 |
+| 이미지 AI 키 (Gemini 또는 OpenAI) · 무료 스톡 사진 (Openverse 기본 · Pexels 선택) | AI: OK (<provider>, 확인됨) / 없음(키 없음 모드) / CONFLICT / 거부 / 모델 없음 / 네트워크 · 스톡: OK (openverse, 키 불필요) / OK (pexels, .env\|env) / MISSING / CONFLICT | 2단계 `IMAGE_KEY`·`STOCK`, 3단계 `IMAGE_KEY_CHECK`. AI 키가 없음·CONFLICT·거부면 온보딩 O9(`/naver-blog-autopilot:blog-onboard`)에서 연동 — 안내 정본 `skills/blog-onboarding/references/image-setup.md`. 스톡 OK는 조치 없음. 스톡 MISSING(`STOCK_PROVIDER=pexels`인데 키 없음)·CONFLICT(`STOCK_PROVIDER` 값 오류)는 프로필 `이미지 소스`에 `stock`이 있을 때만 조치 — `.env`의 `STOCK_PROVIDER=` 줄을 `openverse`로 고치거나 지운다(지우면 키가 있을 때 pexels, 없을 때 openverse — image-setup.md 2절) |
 | business-profile.md 필수 행 | OK / MISSING <행> / INVALID <행>=<값> / NOFILE | 3단계 `profile:` 줄. MISSING·INVALID면 `/naver-blog-autopilot:blog-onboard` 실행(필수 = `블로그 유형`·`업체명`·`상품·서비스`·`톤`·`마무리 블록`·`이미지 소스` 행 + `## 금칙어` 절, 조건 = `마무리 블록`에 `문의헤딩`이 있으면 `연락처`, `장소카드`가 있으면 `장소 검색어`). NOFILE이면 이 커맨드를 다시 실행(3단계 복사). 첫 셋업에서는 MISSING이 정상 — 5단계에서 온보딩을 제안 |
 | 한글 폰트(표지 합성) | OK / MISSING | 아래 안내 |
 | photos/business-intro.png | OK / MISSING | 마무리 블록에 소개 이미지를 넣을 때만(프로필 `마무리 블록`에 `소개이미지`) 아래 안내. 그 밖에는 "-" |
@@ -315,7 +325,7 @@ rm -f .env.tmp   # 성공·실패와 무관하게 임시 파일 정리
     $env:NAVER_STATE = "$PWD\playwright-state\storage_state.json"; & "$(uv tool dir)\naver-blog-cli\Scripts\python.exe" "$HOME\naver-blog-cli\login_setup.py"
     ```
   안내 문구: "브라우저 창이 열리면 직접 로그인하세요. **'로그인 상태 유지'를 반드시 체크**하고, 캡차·2단계 인증·기기 등록도 직접 처리해 주세요. 비밀번호는 저장되지 않고 쿠키 파일만 만들어집니다. 쿠키 파일(`playwright-state/`)은 계정 접근권한 그 자체라 공유·커밋하면 안 됩니다. 로그인 뒤 `/naver-blog-autopilot:blog-setup`을 다시 실행하면 세션이 '정상'으로 바뀝니다."
-- 이미지 AI 키·스톡 사진 키 — 안내 문구는 `${CLAUDE_PLUGIN_ROOT}/skills/blog-onboarding/references/image-setup.md`(정본)의 해당 절을 그대로 보여 준다(`CONFLICT` 안내도 그 파일 1-3절). 키 값은 채팅에 붙여넣지 않는다.
+- 이미지 AI 키·무료 스톡 사진 — 안내 문구는 `${CLAUDE_PLUGIN_ROOT}/skills/blog-onboarding/references/image-setup.md`(정본)의 해당 절을 그대로 보여 준다(`CONFLICT` 안내도 그 파일 1-3절). 키 값은 채팅에 붙여넣지 않는다.
 - 한글 폰트(표지 합성용, `scripts/make_cover.py`)
   ```
   대표이미지(표지)에 제목을 얹으려면 한글 폰트가 필요합니다. Pretendard를 받아(https://github.com/orioncactus/pretendard/releases)

@@ -92,11 +92,20 @@ case "$IP" in
   *) echo "IMAGE_KEY: CONFLICT (IMAGE_PROVIDER 값이 gemini/openai가 아님 — 키를 이 줄에 잘못 넣었는지 확인)" ;;
 esac ;;
 esac
-case ",$SRC," in *,stock,*)   # stock이 있을 때만 Pexels 키 존재 여부를 알린다(값은 출력하지 않는다)
+case ",$SRC," in *,stock,*)   # stock이 있을 때만 무료 스톡 제공자를 알린다(blog-setup 2단계와 같은 판정, 네트워크 조회 없음)
+  # STOCK_PROVIDER(openverse|pexels, 선택) > PEXELS_API_KEY가 있으면 pexels > 둘 다 없으면 openverse(키 불필요). 키는 존재 여부만, STOCK_PROVIDER는 비교만 — 값은 출력하지 않는다.
   P_SRC=""
   [ -f .env ] && awk -v n=PEXELS_API_KEY -v show=0 -v sq="'" "$ENVGET" .env && P_SRC=".env"
   [ -z "$P_SRC" ] && [ -n "$(printenv PEXELS_API_KEY 2>/dev/null | tr -d '[:space:]')" ] && P_SRC="env"
-  [ -n "$P_SRC" ] && echo "PEXELS_KEY: OK" || echo "PEXELS_KEY: MISSING" ;;
+  SP=""
+  [ -f .env ] && SP="$(awk -v n=STOCK_PROVIDER -v show=1 -v sq="'" "$ENVGET" .env | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')"
+  [ -z "$SP" ] && SP="$(printf '%s' "${STOCK_PROVIDER:-}" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')"
+  [ -z "$SP" ] && { [ -n "$P_SRC" ] && SP="pexels" || SP="openverse"; }
+  case "$SP" in
+    openverse) echo "STOCK: OK (openverse, 키 불필요)" ;;
+    pexels) [ -n "$P_SRC" ] && echo "STOCK: OK (pexels, $P_SRC)" || echo "STOCK: MISSING (STOCK_PROVIDER=pexels인데 PEXELS_API_KEY 없음)" ;;
+    *) echo "STOCK: CONFLICT (STOCK_PROVIDER 값이 openverse/pexels가 아님)" ;;
+  esac ;;
 esac
 [ -f knowledge/design-system.md ] && echo "design-system.md: OK" || echo "design-system.md: MISSING"
 MINIMG=$(grep -o 'min_images=[0-9]*' knowledge/design-system.md 2>/dev/null | head -1 | cut -d= -f2)
@@ -160,9 +169,10 @@ done
 | 결과 | 조치 |
 |---|---|
 | `work-folder: MISSING` | "작업 폴더가 아닙니다. 먼저 `/naver-blog-autopilot:blog-setup`을 실행하세요." 안내 후 **중단** |
-| `IMAGE_KEY: MISSING` | 이미지 키(Gemini/OpenAI)가 없다(이 줄은 프로필 `이미지 소스`에 `ai`가 있을 때만 나온다). 두 제공자 안내를 짧게 **경고로 보여 주고 계속**(다시 고르려면 `/naver-blog-autopilot:blog-onboard`의 이미지 소스 단계): Gemini — https://aistudio.google.com/apikey, 결제(Billing) 설정된 Google Cloud 프로젝트의 키, `.env`에 `GEMINI_API_KEY=…` / OpenAI — https://platform.openai.com/api-keys, 결제 수단 등록(GPT 이미지는 조직 인증이 필요할 수 있음), `.env`에 `OPENAI_API_KEY=…`. 채팅에 붙여넣지 않기. 이 실행은 "키 없음 모드": Step 3에서 ai 슬롯은 `보류`(photo 슬롯은 그대로, stock 슬롯은 `PEXELS_KEY`가 OK이면 그대로 처리. 표지 `00`은 `photos/` 실사진을 배경으로 `make_cover.py`만 돌려 만들 수 있다 — 비용 0). 자동 이미지 수단이 하나도 없으면(표 아래 정의) `photos:` < `min_images:`일 때 업로드까지 갈 수 없다 — B 발주 전에 묻는다(아래 [B] 참고) |
+| `IMAGE_KEY: MISSING` | 이미지 키(Gemini/OpenAI)가 없다(이 줄은 프로필 `이미지 소스`에 `ai`가 있을 때만 나온다). 두 제공자 안내를 짧게 **경고로 보여 주고 계속**(다시 고르려면 `/naver-blog-autopilot:blog-onboard`의 이미지 소스 단계): Gemini — https://aistudio.google.com/apikey, 결제(Billing) 설정된 Google Cloud 프로젝트의 키, `.env`에 `GEMINI_API_KEY=…` / OpenAI — https://platform.openai.com/api-keys, 결제 수단 등록(GPT 이미지는 조직 인증이 필요할 수 있음), `.env`에 `OPENAI_API_KEY=…`. 채팅에 붙여넣지 않기. 이 실행은 "키 없음 모드": Step 3에서 ai 슬롯은 `보류`(photo 슬롯은 그대로, stock 슬롯은 `STOCK`이 OK이면 그대로 처리. 표지 `00`은 `photos/` 실사진을 배경으로 `make_cover.py`만 돌려 만들 수 있다 — 비용 0). 자동 이미지 수단이 하나도 없으면(표 아래 정의) `photos:` < `min_images:`일 때 업로드까지 갈 수 없다 — B 발주 전에 묻는다(아래 [B] 참고) |
 | `IMAGE_KEY: CONFLICT` | `IMAGE_PROVIDER`(키: API 키(GEMINI_API_KEY/OPENAI_API_KEY)가 든 첫 .env 파일의 값. 어느 파일에도 없으면 환경변수. IMAGE_PROVIDER·IMAGE_MODEL: 키를 찾은 .env의 값(그 파일에 없으면 미지정). 키를 환경변수에서 읽을 때는 항목마다 cwd .env → 환경변수 중 처음 값이 있는 곳.)가 가리키는 제공자의 키가 없거나 값이 `gemini`/`openai`가 아니다(출력 괄호 참고 — 잘못된 값은 키가 섞였을 수 있어 출력하지 않는다. 담당자에게도 그 줄 값을 붙여넣게 하지 않는다). 이대로면 `gen_image.py`가 오류로 멈춘다. "`.env`를 고쳐 주세요 — `IMAGE_PROVIDER=`가 가리키는 제공자의 키(`GEMINI_API_KEY=` 또는 `OPENAI_API_KEY=`)를 넣거나, `IMAGE_PROVIDER=`를 가진 키의 제공자로 바꾸거나 줄을 지우세요(키를 채팅에 붙여넣지 않기). 고친 뒤 `/naver-blog-autopilot:blog-setup`으로 확인할 수 있습니다." 안내 후 **중단** |
-| `PEXELS_KEY: MISSING` | 프로필 `이미지 소스`에 `stock`이 있는데 스톡 사진(Pexels) 키가 없다. **경고하고 계속**: "스톡 사진 키가 없습니다 — https://www.pexels.com/api/ 에서 무료로 발급해 `.env`에 `PEXELS_API_KEY=…`로 적어 주세요(채팅에 붙여넣지 않기). 확인: `python3 scripts/check_image_key.py --stock`." 이 실행은 "스톡 슬롯 보류": Step 3에서 `stock` 슬롯은 `fetch_stock.py`를 돌리지 않고 `파일`을 `보류`, `검수`를 `스톡 키 없음`으로 적는다(ai·photo 슬롯은 그대로). 값은 읽거나 출력하지 않는다. 자동 이미지 수단 판정은 표 아래 정의 |
+| `STOCK: MISSING` | 프로필 `이미지 소스`에 `stock`이 있고 `.env`에 `STOCK_PROVIDER=pexels`가 있는데 `PEXELS_API_KEY`가 없다(다른 제공자로 넘어가지 않는다). **경고하고 계속**: "무료 스톡 사진은 키 없이 Openverse로 받을 수 있습니다 — `.env`의 `STOCK_PROVIDER=pexels` 줄을 `STOCK_PROVIDER=openverse`로 고치거나 지워 주세요. Pexels 키가 이미 있다면 `.env`에 `PEXELS_API_KEY=…`로 적어 주세요(채팅에 붙여넣지 않기, Pexels는 신규 키 발급 일시 중단). 확인: `python3 scripts/check_image_key.py --stock`." 이 실행은 "스톡 슬롯 보류": Step 3에서 `stock` 슬롯은 `fetch_stock.py`를 돌리지 않고 `파일`을 `보류`, `검수`를 `스톡 키 없음`으로 적는다(ai·photo 슬롯은 그대로). 값은 읽거나 출력하지 않는다. 자동 이미지 수단 판정은 표 아래 정의 |
+| `STOCK: CONFLICT` | 프로필 `이미지 소스`에 `stock`이 있는데 `STOCK_PROVIDER` 값이 `openverse`/`pexels`가 아니다(잘못된 값은 키가 섞였을 수 있어 출력하지 않는다. 담당자에게도 그 줄 값을 붙여넣게 하지 않는다). **경고하고 계속**: "`.env`의 `STOCK_PROVIDER=` 줄을 `openverse`(키 불필요)나 `pexels`(이미 키가 있을 때)로 고치거나 지워 주세요. 확인: `python3 scripts/check_image_key.py --stock`." 이 실행은 `STOCK: MISSING`과 같은 "스톡 슬롯 보류"다(`검수`는 `스톡 설정 오류`). `STOCK: OK (…)`는 조치 없음 |
 | `design-system.md: MISSING` | "`blog-design-system` 스킬로 디자인 시스템을 먼저 만들어 주세요." 안내 후 **중단** |
 | `blogId: MISSING` / `MISMATCH` | 글을 올릴 블로그 ID가 없거나 두 곳의 값이 다르다. 출력 괄호대로 "작업 폴더 `.env`의 `NAVER_BLOG_ID=`와 `knowledge/source-blogs.json`의 `own_blog.blogId`를 같은 블로그 ID(`blog.naver.com/<여기>`)로 채워 주세요 — `.env` 줄은 `/naver-blog-autopilot:blog-setup`이 받아 적어 줍니다." 안내 후 **중단**(lint는 `--blog-id`가 없으면 `.env` 값을, 업로드 스크립트는 넘겨받은 `--blog-id`를, 스킬은 `own_blog.blogId`를 읽는다. 기본값 없음. 이때 `session: SKIPPED`는 따로 다루지 않는다) |
 | `profile:` 줄이 `profile: OK`가 아님 (`MISSING <행>,…` · `INVALID <행>=<값>` · `NOFILE` · 줄이 없음) | 프로필이 아직 완성되지 않았다. "프로필이 완성되지 않았습니다(<출력 첫 줄 그대로>). 먼저 `/naver-blog-autopilot:blog-onboard`를 실행하세요 — 대화로 채워 줍니다(1.0.0에서 올린 작업 폴더도 한 번만 실행하면 됩니다)." 안내 후 **중단**. `NOFILE`(`knowledge/business-profile.md` 없음)이면 "`/naver-blog-autopilot:blog-setup`을 다시 실행한 뒤 `blog-onboard`를 실행하세요"로 안내한다. 직접 고치려면 출력에 나온 행 이름 그대로 `knowledge/business-profile.md`를 채운다(`## 금칙어` 절은 금칙어가 없으면 `- 없음` 한 줄). 필수 = `블로그 유형`·`업체명`·`상품·서비스`·`톤`·`마무리 블록`(항목에 `해시태그` 포함)·`이미지 소스` + 조건 행(`연락처` = `마무리 블록`에 `문의헤딩`이 있을 때, `장소 검색어` = `장소카드`가 있을 때) + `## 금칙어` 절. `고객 지역`·`업체 유형어`·`업종 일반어`는 선택이다. 비어 있으면 dedupe·lint·표지·빌드가 exit 2로 멈춘다 |
@@ -178,7 +188,7 @@ done
 | `image-sources: …` · `closing-blocks: …` · `regions: …` | 정보 줄(중단·경고 아님). 프로필 `이미지 소스`(`ai`·`stock`·`photo`)·`마무리 블록`(`문의헤딩`·`소개이미지`·`장소카드`·`해시태그`)·`고객 지역`을 읽은 값으로, 프로필이 OK가 아니면 `-`다. 뒤 단계의 조건(Step 3의 `stock` 슬롯, Step 4·5의 마무리 블록, 게이트 1의 지역 질문)에 쓰므로 기억해 둔다 |
 | `learned: …` | 정보 줄(중단·경고 아님). `적용 중 n개 · 후보 n개`를 시작 안내에 한 줄로 보여 준다. `learned: 없음(첫 사용)`이면 학습 규칙 없이 진행한다(아래 발주·재개 메시지의 `knowledge/learned-preferences.md`는 빼고 보낸다) |
 
-**자동 이미지 수단 없음**(아래 [B] 발주 전 확인과 Step 3 끝의 확정 이미지 수 확인에 쓴다): (`image-sources:`에 `ai`가 없거나 `IMAGE_KEY`가 OK가 아님) **그리고** (`image-sources:`에 `stock`이 없거나 `PEXELS_KEY`가 OK가 아님). 이 상태에서는 `photos/` 실사진만으로 이미지를 채워야 한다.
+**자동 이미지 수단 없음**(아래 [B] 발주 전 확인과 Step 3 끝의 확정 이미지 수 확인에 쓴다): (`image-sources:`에 `ai`가 없거나 `IMAGE_KEY`가 OK가 아님) **그리고** (`image-sources:`에 `stock`이 없거나 `STOCK`이 OK가 아님). 이 상태에서는 `photos/` 실사진만으로 이미지를 채워야 한다.
 
 중단할 항목이 없으면(경고 항목은 모드만 기억하고) 기발행 글 목록을 갱신하고 자기 글 수를 센다(`<blogId>`는 위 출력값):
 
@@ -274,7 +284,7 @@ NNN=$(printf '%03d' $((10#${LAST:-0} + 1))); echo "NNN=$NNN"
 ## [B] 초안 — `naver-blog-autopilot:blog-writer` 발주 (디스패치 1)
 
 **발주 전 확인(자동 이미지 수단 없음 + 실사진 부족)**: Step 0 표 아래 정의의 "자동 이미지 수단 없음"(키 없음 모드이면서 스톡 슬롯 보류이거나 `ai`·`stock`이 이미지 소스가 아님)이고 Step 0의 `photos:` 값이 `min_images:`보다 작으면, 이 글은 이미지 수 기준을 채우지 못해 임시저장까지 갈 수 없다. 이유를 한 줄로 알리고 **AskUserQuestion** `초안까지만 진행(업로드 불가)` / `중단하고 키·사진 준비`.
-- `중단하고 키·사진 준비` → `.env`에 이미지 키(Gemini `GEMINI_API_KEY` — 결제 설정된 Google Cloud 프로젝트의 키 / OpenAI `OPENAI_API_KEY` — 결제 수단 등록·필요 시 조직 인증 / 스톡 사진 `PEXELS_API_KEY` — https://www.pexels.com/api/ 무료. 고르고 연동하는 안내는 `/naver-blog-autopilot:blog-onboard`의 이미지 소스 단계) 또는 `photos/`에 실사진 `min_images`장 이상을 준비하라고 안내하고 끝낸다(디스패치 0).
+- `중단하고 키·사진 준비` → `.env`에 이미지 키(Gemini `GEMINI_API_KEY` — 결제 설정된 Google Cloud 프로젝트의 키 / OpenAI `OPENAI_API_KEY` — 결제 수단 등록·필요 시 조직 인증 / 무료 스톡 사진은 키 불필요(Openverse) — `STOCK`이 MISSING·CONFLICT면 `.env`의 `STOCK_PROVIDER=` 줄을 `openverse`로 고치거나 지우기, Pexels 키가 이미 있으면 `PEXELS_API_KEY`(선택). 고르고 연동하는 안내는 `/naver-blog-autopilot:blog-onboard`의 이미지 소스 단계) 또는 `photos/`에 실사진 `min_images`장 이상을 준비하라고 안내하고 끝낸다(디스패치 0).
 - `초안까지만 진행(업로드 불가)` → 그대로 B부터 진행한다. Step 3 끝의 "확정 이미지 수 확인"에서 멈추고 `resume`을 안내하게 된다.
 
 ```
@@ -495,26 +505,26 @@ else echo "직접 수정: 있음"; python3 scripts/diff_published.py "$P/draft-v
 
 ## Step 3. 이미지 (메인)
 
-**Skill 도구로** `naver-blog-autopilot:blog-image-director`를 실행해 메인이 직접 수행한다(입력 `work/posts/<NNN-slug>/draft-v2.md`·`gates.md`, 있으면 `knowledge/learned-preferences.md` — 스킬이 `범주=이미지·표지` 규칙을 프롬프트·표지 줄바꿈·배경 선택에 반영하고 요약에 `적용 규칙: L-…`을 적는다. 이 줄을 종료 보고용으로 기록해 둔다). 산출: `P/images/image-plan.md`(열: 슬롯 | 위치(소제목) | 목적 | 유형 | 프롬프트(ai) / 검색어(stock) / 후보 파일(photo) | 캡션(alt) | 파일 | 검수 | 출처), `P/images/NN-<slug>.png`(ai 슬롯), `P/images/NN-<slug>.jpg`(stock 슬롯 — 아래 `fetch_stock.py`가 받음), 표지 `P/images/00-bg.png`(배경)·`P/images/00-cover.png`(합성), 게이트 3용 요약.
+**Skill 도구로** `naver-blog-autopilot:blog-image-director`를 실행해 메인이 직접 수행한다(입력 `work/posts/<NNN-slug>/draft-v2.md`·`gates.md`, 있으면 `knowledge/learned-preferences.md` — 스킬이 `범주=이미지·표지` 규칙을 프롬프트·표지 줄바꿈·배경 선택에 반영하고 요약에 `적용 규칙: L-…`을 적는다. 이 줄을 종료 보고용으로 기록해 둔다). 산출: `P/images/image-plan.md`(열: 슬롯 | 위치(소제목) | 목적 | 유형 | 프롬프트(ai) / 검색어(stock) / 후보 파일(photo) | 캡션(alt) | 파일 | 검수 | 출처), `P/images/NN-<slug>.png`(ai 슬롯), `P/images/NN-<slug>.jpg`(stock 슬롯 — 아래 `fetch_stock.py`가 받음. 원본이 PNG면 `.png`), 표지 `P/images/00-bg.png`(배경)·`P/images/00-cover.png`(합성), 게이트 3용 요약.
 
 - **표지 `00` 행**: 스킬이 image-plan.md 맨 윗줄에 `| 00 | 표지(대표) | 표지 | cover | <글자 없는 배경 프롬프트> | 제목: <frontmatter title 그대로>; 줄바꿈: 줄1; 줄2 | images/00-cover.png | <검수> |`를 넣고, 배경 `uv run --with google-genai --with pillow scripts/gen_image.py …`(cover 행 → `images/00-bg.png`) → 합성 `uv run --with pillow scripts/make_cover.py --bg <P>/images/00-bg.png --title "줄1|줄2" [--sub …] --out <P>/images/00-cover.png`까지 만든다. `00`은 draft-v2.md 슬롯이 아니다 — 슬롯 수 대조·확정 이미지 수에서 빠진다. `00` 행 `파일` 칸은 항상 `images/00-cover.png`이고, 표지가 만들어졌는지는 그 파일이 있는지로 본다.
-- **`stock` 슬롯**(image-plan.md에 `유형`이 `stock`인 행이 있을 때 — 프로필 `이미지 소스`에 `stock`이 있는 구성): 스킬이 그 행의 프롬프트 칸에 영문 검색어 2~4단어를 적는다. 메인이 Pexels 무료 사진으로 받는다(표준 라이브러리만 — `uv run` 불필요, 과금 없음). **dry-run을 먼저** 돌려 슬롯·검색어·예상 파일명을 확인하고, 그다음 실제로 받는다:
+- **`stock` 슬롯**(image-plan.md에 `유형`이 `stock`인 행이 있을 때 — 프로필 `이미지 소스`에 `stock`이 있는 구성): 스킬이 그 행의 프롬프트 칸에 영문 검색어 2~3단어(일반 사물·장면)를 적는다. 메인이 무료 스톡 사진으로 받는다 — 제공자는 Step 0 `STOCK: OK (<제공자>, …)`와 같다: 기본 **Openverse**(키 불필요, CC0·퍼블릭 도메인만, 익명 한도 분당 20회·하루 200회) / 이미 키가 있으면 **Pexels**(선택). 표준 라이브러리만 — `uv run` 불필요, 과금 없음. **dry-run을 먼저** 돌려 슬롯·검색어·예상 파일명을 확인하고, 그다음 실제로 받는다:
   ```bash
   python3 scripts/fetch_stock.py work/posts/<NNN-slug> --dry-run
   python3 scripts/fetch_stock.py work/posts/<NNN-slug>
   ```
-  시작 줄 `스톡: pexels · 키: …`은 `gen_image.py` 시작 줄처럼 그대로 옮기지 않는다(키 파일 경로를 보고·`gates.md`에 쓰지 않는다 — 키 값은 출력되지 않는다). 슬롯 줄은 `[OK] 03 → images/03-<slug>.jpg (출처: Pexels/<사진작가> <URL>)` · `[보류] 05 검색어 없음` · `[보류] 04 검색 결과 없음 (<검색어>)`, 끝 줄은 `저장 n장 · 보류 n장`이다. 스크립트가 `파일`·`출처`(없으면 `검수`) 칸을 image-plan.md에 직접 적는다. `PEXELS_KEY: MISSING`(스톡 슬롯 보류 모드)이면 스크립트를 돌리지 않고 stock 행의 `파일`을 `보류`, `검수`를 `스톡 키 없음`으로 적는다. 받은 사진은 각각 Read로 열어 blog-image-director 스킬 7단계 기준(글자·로고·얼굴 클로즈업·중복·캡션 일치)으로 검수하고 `검수` 열을 갱신한다(스톡 사진에도 같은 기준이다).
+  시작 줄은 `스톡: openverse · 키: 필요 없음` 또는 `스톡: pexels · 키: <source>`다(`--dry-run`도 결정된 제공자를 보인다). 제공자가 Step 0 `STOCK: OK (<제공자>, …)`와 다르면 받기를 멈추고 `.env`의 `STOCK_PROVIDER`를 확인하라고 보고한다. pexels 시작 줄은 `gen_image.py` 시작 줄처럼 그대로 옮기지 않는다(키 파일 경로를 보고·`gates.md`에 쓰지 않는다 — 키 값은 출력되지 않는다. 보고에는 제공자 이름만). 슬롯 줄은 `[OK] NN → images/NN-<slug>.jpg|png (출처: Openverse/<source> · <creator|작자 미상> · <LICENSE> <foreign_landing_url>)`(Pexels는 `(출처: Pexels/<사진작가> <URL>)`. 결과 0건이라 마지막 단어를 뺀 검색어로 1회 다시 찾아 받았으면 끝에 ` (검색어 줄임: <새 검색어>)`) · `[보류] 05 검색어 없음` · `[보류] 04 검색 결과 없음 (<검색어>)`, 끝 줄은 `저장 n장 · 보류 n장`이다. 사진 호스트가 받기를 거부한 후보는 건너뛰고, 받기 시도(두 검색 합쳐 최대 5번)가 모두 받기 오류면 그 슬롯은 `보류`·`사진 받기 실패`다. 스크립트가 `파일`·`출처`(없으면 `검수`) 칸을 image-plan.md에 직접 적는다 — 출처 형식은 Openverse `출처: Openverse/<source> · <creator 또는 작자 미상> · <license 대문자> <foreign_landing_url>`, Pexels `출처: Pexels/<사진작가> <URL>`. Openverse는 원본 가로 1200px 이상·받은 파일 가로 800px 이상의 JPEG·PNG만 쓰고(JPEG는 `.jpg`, PNG는 `.png`로 저장, 다른 형식이나 8MB 초과 파일은 본문을 받지 않고 건너뜀 — 형식 표기가 없거나 애매하면 8MB까지 받은 뒤 파일 앞부분으로 판정, 사진 받기는 재검색까지 합쳐 슬롯당 최대 5번), 이 작업 폴더의 다른 글이 이미 쓴 원본 페이지는 건너뛴다. `STOCK: MISSING`·`CONFLICT`(스톡 슬롯 보류 모드)이면 스크립트를 돌리지 않고 stock 행의 `파일`을 `보류`, `검수`를 `스톡 키 없음`(MISSING) 또는 `스톡 설정 오류`(CONFLICT)로 적는다. 받은 사진은 각각 Read로 열어 blog-image-director 스킬 7단계 기준(글자·로고·얼굴 클로즈업·중복·캡션 일치)으로 검수하고 `검수` 열을 갱신한다(스톡 사진에도 같은 기준이다).
 
   | exit | 의미 | 대응 |
   |---|---|---|
-  | 0 | 처리 완료(보류 포함) · `--dry-run` · stock 행 없음 | 끝 줄 `저장 n장 · 보류 n장`을 읽는다. 보류 슬롯의 `검수`에 사유(`검색어 없음`·`검색 결과 없음`)가 적혀 있다 → 게이트 3 `다른 사진으로(검색어 수정)` 대상 |
-  | 2 | 키 없음(`스톡 키 없음 — .env에 PEXELS_API_KEY=…`) · image-plan.md 없음 · 표 파싱 실패 · 잘못된 인자 | 키 없음이면 위의 스톡 슬롯 보류 처리를 하고 계속. 그 밖은 중단·보고 |
-  | 3 | 키 거부(401·403) | 그때까지 받은 슬롯은 image-plan.md에 저장돼 있다. "`.env`의 `PEXELS_API_KEY`를 확인하세요 — `python3 scripts/check_image_key.py --stock`"로 안내하고, 남은 stock 행은 `파일`=`보류`·`검수`=`스톡 키 거부`로 두고 계속 |
-  | 5 | 네트워크 오류·5xx | 남은 슬롯 중단(받은 것은 유지). 같은 명령 1회 재시도, 반복되면 남은 stock 행을 `파일`=`보류`·`검수`=`스톡 받기 실패`로 두고 계속 |
-  | 6 | 요청 한도(429) | 재시도 없이 중단(받은 것은 유지). 한도가 풀린 뒤 `--only <남은 슬롯>`으로 이어 받도록 안내하고, 남은 stock 행은 `파일`=`보류`·`검수`=`스톡 요청 한도`로 두고 계속 |
-- **키 없음 모드**(Step 0 `IMAGE_KEY: MISSING`) 또는 요약에 **"Gate: 이미지 키 대기"**가 있으면: 생성은 하지 않는다(스킬 1~5단계로 image-plan.md를 쓰고 photo 후보만 고른다 — `stock` 슬롯은 위 항목대로 따로 처리). image-plan.md에서 `유형`이 `ai`인 행의 `파일`을 `보류`, `검수`를 `키 없음`으로 적는다. **표지**는 `photos/`의 실사진 1장(또는 이미 받은 stock 사진 `images/NN-<slug>.jpg`)을 배경으로 `make_cover.py`만 돌려 만들 수 있다(비용 0): `uv run --with pillow scripts/make_cover.py --bg photos/<파일> --title "줄1|줄2" [--sub …] --out <P>/images/00-cover.png` → `00` 행 `검수`를 `실사진 배경 photos/<파일>`로. 맞는 실사진이 없으면 `00` 행 `검수`를 `키 없음(표지 보류)`로 두고 `00-cover.png`는 만들지 않는다(아래 확정 확인에서 멈춘다). 담당자가 그 자리에서 키를 채웠다고 하면 `uv run --with google-genai --with pillow scripts/gen_image.py work/posts/<NNN-slug>/images/image-plan.md`를 실행해 보류를 풀어도 된다(cover 행 배경 `00-bg.png`도 함께 생성되므로 이어서 `make_cover.py`로 표지를 합성). 그 뒤 생성된 각 이미지를 Read로 열어 blog-image-director 스킬 7단계 기준(글자·얼굴·중복·캡션·로고)으로 검수하고 image-plan.md `검수` 열을 갱신한 다음 게이트 3으로 간다. 이 생성도 스킬의 한도(ai 슬롯 수 × 3)에 포함한다.
+  | 0 | 처리 완료(보류 포함) · `--dry-run` · stock 행 없음 | 끝 줄 `저장 n장 · 보류 n장`을 읽는다. 보류 슬롯의 `검수`에 사유(`검색어 없음`·`검색 결과 없음`·`사진 받기 실패`)가 적혀 있다 → 게이트 3 `다른 사진으로(검색어 수정)` 대상 |
+  | 2 | 설정 오류 — `STOCK_PROVIDER` 값 오류(`오류: STOCK_PROVIDER 값이 올바르지 않습니다 — openverse 또는 pexels 중 하나여야 합니다(값은 출력하지 않음)`) · `STOCK_PROVIDER=pexels`인데 키 없음 · image-plan.md 없음 · 표 파싱 실패 · 잘못된 인자 | `STOCK_PROVIDER` 값 오류·키 없음이면 위의 스톡 슬롯 보류 처리를 하고 계속(Step 0 `STOCK: CONFLICT`·`MISSING` 안내). 그 밖은 중단·보고 |
+  | 3 | 거부(401·403) | 그때까지 받은 슬롯은 image-plan.md에 저장돼 있다. pexels면 "`.env`의 `PEXELS_API_KEY`를 확인하세요", openverse면 "잠시 뒤 다시 해 보세요"로 안내하고(둘 다 확인 명령 `python3 scripts/check_image_key.py --stock`), 남은 stock 행은 `파일`=`보류`·`검수`=`스톡 거부`로 두고 계속 |
+  | 5 | 네트워크 오류·5xx·JSON 아닌 응답 | 남은 슬롯 중단(받은 것은 유지). 같은 명령 1회 재시도, 반복되면 남은 stock 행을 `파일`=`보류`·`검수`=`스톡 받기 실패`로 두고 계속 |
+  | 6 | 요청 한도(429 — Openverse는 `Openverse 429: 요청 한도 초과…`, 익명 한도 분당 20회·하루 200회) | 재시도 없이 중단(받은 것은 유지). 한도가 풀린 뒤 `--only <남은 슬롯>`으로 이어 받도록 안내하고, 남은 stock 행은 `파일`=`보류`·`검수`=`스톡 요청 한도`로 두고 계속 |
+- **키 없음 모드**(Step 0 `IMAGE_KEY: MISSING`) 또는 요약에 **"Gate: 이미지 키 대기"**가 있으면: 생성은 하지 않는다(스킬 1~5단계로 image-plan.md를 쓰고 photo 후보만 고른다 — `stock` 슬롯은 위 항목대로 따로 처리). image-plan.md에서 `유형`이 `ai`인 행의 `파일`을 `보류`, `검수`를 `키 없음`으로 적는다. **표지**는 `photos/`의 실사진 1장(또는 이미 받은 stock 사진 `images/NN-<slug>.jpg`·`.png`)을 배경으로 `make_cover.py`만 돌려 만들 수 있다(비용 0): `uv run --with pillow scripts/make_cover.py --bg photos/<파일> --title "줄1|줄2" [--sub …] --out <P>/images/00-cover.png` → `00` 행 `검수`를 `실사진 배경 photos/<파일>`로. 맞는 실사진이 없으면 `00` 행 `검수`를 `키 없음(표지 보류)`로 두고 `00-cover.png`는 만들지 않는다(아래 확정 확인에서 멈춘다). 담당자가 그 자리에서 키를 채웠다고 하면 `uv run --with google-genai --with pillow scripts/gen_image.py work/posts/<NNN-slug>/images/image-plan.md`를 실행해 보류를 풀어도 된다(cover 행 배경 `00-bg.png`도 함께 생성되므로 이어서 `make_cover.py`로 표지를 합성). 그 뒤 생성된 각 이미지를 Read로 열어 blog-image-director 스킬 7단계 기준(글자·얼굴·중복·캡션·로고)으로 검수하고 image-plan.md `검수` 열을 갱신한 다음 게이트 3으로 간다. 이 생성도 스킬의 한도(ai 슬롯 수 × 3)에 포함한다.
 - **제공자 확인**(ai 슬롯이 있을 때): `gen_image.py` 시작 줄 `키: … · 제공자: … · 모델: …`이 Step 0의 `IMAGE_KEY: OK (<provider>, …)`와 같은 제공자인지 본다(다르면 생성을 멈추고 `.env`의 `IMAGE_PROVIDER`를 확인하라고 보고). 시작 줄은 그대로 옮기지 않는다 — 보고·`gates.md`에는 `제공자` 값만 쓰고 키 파일 경로·모델은 쓰지 않는다. 생성이 결제·권한 문제로 실패하면 제공자별로 안내한다 — Gemini `429`: 결제(Billing)가 없는 키(무료 키는 기다려도 안 풀림), OpenAI `401`/`403`: 키 오류 또는 조직 인증(Verify Organization) 필요, 결제 수단 미등록, `429`가 insufficient_quota·billing이면 결제·한도 문제(남은 슬롯 중단 — 다른 429·5xx는 스크립트가 최대 3회 재시도 후 그 슬롯만 실패) — 키 확인(`check_image_key.py`)이 통과해도 생성에서 403이 나면 조직 인증이 필요한 것이다. 비용은 Gemini 1장 약 $0.04(추정치) / OpenAI는 요금 페이지 확인.
-- `파일` 경로 규칙: ai = **글 폴더 기준** `images/NN-<slug>.png`, stock = **글 폴더 기준** `images/NN-<slug>.jpg`, photo = **작업 폴더 기준** `photos/<파일>`.
+- `파일` 경로 규칙: ai = **글 폴더 기준** `images/NN-<slug>.png`, stock = **글 폴더 기준** `images/NN-<slug>.jpg`(원본이 PNG면 `.png`), photo = **작업 폴더 기준** `photos/<파일>`.
 
 ## ● 게이트 3 — 이미지 승인 (슬롯별)
 
@@ -522,9 +532,9 @@ else echo "직접 수정: 있음"; python3 scripts/diff_published.py "$P/draft-v
 **AskUserQuestion**으로 슬롯별로 묻는다(한 호출에 최대 4슬롯, 넘으면 나눠서):
 - `00 표지`: `승인` / `재생성 — 줄바꿈·배지 문구`(바꿀 줄바꿈·`--sub` 문구는 기타 입력, `make_cover.py`만 다시 — 비용 0) / `재생성 — 배경`(바꿀 장면은 기타 입력, `gen_image.py --only 00` → `make_cover.py`; 키 없음 모드에서는 빼고 묻는다) / `실사진 배경으로`(파일명은 기타 입력, `make_cover.py --bg photos/<파일>`만)
 - ai 슬롯: `승인` / `재생성`(바꿀 점은 기타 입력) / `실사진으로 교체`(파일명은 기타 입력) / `제거`
-- stock 슬롯: `승인` / `다른 사진으로(검색어 수정)`(현재 검색어와 출처를 함께 보여 주고, 새 검색어는 기타 입력 — 영문 2~4단어) / `실사진으로 교체`(파일명은 기타 입력) / `제거`
+- stock 슬롯: `승인` / `다른 사진으로(검색어 수정)`(현재 검색어와 출처를 함께 보여 주고, 새 검색어는 기타 입력 — 영문 2~3단어) / `실사진으로 교체`(파일명은 기타 입력) / `제거`
 - photo 슬롯: 후보 파일 최대 3개(`photos/…`) / `제거`(다른 파일·AI 전환은 기타 입력)
-- `보류` 슬롯(키 없음): `보류 유지`(final.md에서 빠지고 나중에 Step 3 재실행) / `제거` / `실사진으로 교체`(파일명은 기타 입력). stock 슬롯이 `검색 결과 없음`·`검색어 없음`으로 보류된 것은 `PEXELS_KEY`가 OK일 때 `다른 사진으로(검색어 수정)`도 고를 수 있다
+- `보류` 슬롯(키 없음): `보류 유지`(final.md에서 빠지고 나중에 Step 3 재실행) / `제거` / `실사진으로 교체`(파일명은 기타 입력). stock 슬롯이 `검색 결과 없음`·`검색어 없음`·`사진 받기 실패`로 보류된 것은 `STOCK`이 OK일 때 `다른 사진으로(검색어 수정)`도 고를 수 있다
 
 `P/gates.md`에 append:
 
@@ -561,7 +571,7 @@ FID=$(python3 scripts/feedback_log.py add --post <NNN-slug> --stage 게이트3 -
   ```bash
   python3 scripts/fetch_stock.py work/posts/<NNN-slug> --only NN
   ```
-  exit 표는 Step 3과 같다(과금 없음 — Pexels 요청 한도만 있다). 새 사진을 Read로 열어 검수하고(스킬 7단계 기준 — 글자·로고·얼굴 클로즈업) `검수`·`출처` 칸이 갱신됐는지 보고 그 슬롯만 다시 묻는다. 슬롯당 검색어 변경 최대 2회 — 넘으면 `제거`·`실사진으로 교체` 중에서 고르게 한다.
+  exit 표는 Step 3과 같다(과금 없음 — 스톡 제공자의 요청 한도만 있다). 새 사진을 Read로 열어 검수하고(스킬 7단계 기준 — 글자·로고·얼굴 클로즈업) `검수`·`출처` 칸이 갱신됐는지 보고 그 슬롯만 다시 묻는다. 슬롯당 검색어 변경 최대 2회 — 넘으면 `제거`·`실사진으로 교체` 중에서 고르게 한다.
 - 재생성 → 요청대로 그 행의 프롬프트를 고친 뒤
   ```bash
   uv run --with google-genai --with pillow scripts/gen_image.py work/posts/<NNN-slug>/images/image-plan.md --only NN
@@ -607,7 +617,7 @@ PY
 
 - 확정 이미지 ≥ 필요 **그리고** `00-cover.png: 있음` → Step 4.
 - 표지 `00` 행이 없으면 → 스킬 5단계대로 `00` 행을 추가하고 표지를 만든 뒤 게이트 3에서 표지만 묻는다.
-- 확정 이미지 < 필요, 또는 `00-cover.png: 없음`(키 없음 + 맞는 실사진 없음) → **Step 4로 가지 않고 멈춘다**(final.md를 만들지 않음). 담당자에게 "확정 이미지 n장 / 필요 m장 · 표지 있음|없음 — 키 또는 실사진 준비 후 `/naver-blog-autopilot:blog-run resume <NNN>`"이라고 알리고 종료 보고로 간다(키는 `.env`에 Gemini `GEMINI_API_KEY` — 결제 설정된 프로젝트의 키 — 또는 OpenAI `OPENAI_API_KEY` — 결제 수단·조직 인증, 스톡 사진은 Pexels `PEXELS_API_KEY`, 실사진은 `photos/`에). image-plan.md·gates.md는 그대로 두어 `resume`이 이어받게 한다.
+- 확정 이미지 < 필요, 또는 `00-cover.png: 없음`(키 없음 + 맞는 실사진 없음) → **Step 4로 가지 않고 멈춘다**(final.md를 만들지 않음). 담당자에게 "확정 이미지 n장 / 필요 m장 · 표지 있음|없음 — 키 또는 실사진 준비 후 `/naver-blog-autopilot:blog-run resume <NNN>`"이라고 알리고 종료 보고로 간다(키는 `.env`에 Gemini `GEMINI_API_KEY` — 결제 설정된 프로젝트의 키 — 또는 OpenAI `OPENAI_API_KEY` — 결제 수단·조직 인증, 무료 스톡 사진은 키 불필요(Openverse) — `STOCK`이 MISSING·CONFLICT면 `.env`의 `STOCK_PROVIDER=` 확인, 실사진은 `photos/`에). image-plan.md·gates.md는 그대로 두어 `resume`이 이어받게 한다.
 
 ## Step 4. `final.md` 생성 (메인)
 
@@ -761,20 +771,20 @@ PEND=$(python3 scripts/feedback_log.py pending | python3 -c "import json,sys;pri
 
 인자가 `resume NNN`이면 이 절만 수행한다. **디스패치는 하지 않는다.** 글 폴더 `P=$(ls -d work/posts/NNN-* | head -1)`에서 이어 갈 지점을 정한다.
 
-- `P/final.md`가 있으면 → **업로드 재개**. 단 `P/images/image-plan.md`에 `파일`이 `보류`인 행이 있고 이번 preflight에서 `IMAGE_KEY: OK`(ai 보류) 또는 `PEXELS_KEY: OK`(stock 보류)이면, AskUserQuestion `보류 이미지 채우고 final.md 다시 만들기` / `지금 final.md로 업로드만` — 앞의 것이면 **이미지 재개**로 간다.
+- `P/final.md`가 있으면 → **업로드 재개**. 단 `P/images/image-plan.md`에 `파일`이 `보류`인 행이 있고 이번 preflight에서 `IMAGE_KEY: OK`(ai 보류) 또는 `STOCK: OK (…)`(stock 보류)이면, AskUserQuestion `보류 이미지 채우고 final.md 다시 만들기` / `지금 final.md로 업로드만` — 앞의 것이면 **이미지 재개**로 간다.
 - `final.md`가 없고 `P/draft-v2.md`와 `P/gates.md`의 `## 초안피드백`이 있으면 → **이미지 재개**(Step 3부터).
 - 둘 다 아니면 "이어서 할 단계가 없습니다 — `/naver-blog-autopilot:blog-run`으로 게이트 2까지 먼저 진행하세요"라고 답하고 끝.
 
 ### 이미지 재개 (Step 3 → 게이트 3 → Step 4 → Step 5)
 
-1. Step 0의 preflight Bash를 그대로 실행하고 Step 0 표대로 판정한다: `work-folder`·`script`·`skill`·`design-system.md`·`blogId`·`profile`·`intro-image`·`font`·`uv`가 MISSING/OUTDATED(`blogId`는 MISMATCH, `profile`은 `OK`가 아닌 모든 출력 — NOFILE 포함)이면 그 표의 안내 후 끝낸다(`intro-image`는 `MISSING`일 때만 — `N/A`는 통과). `IMAGE_KEY: CONFLICT`면 Step 0 표대로 `.env` 수정 안내 후 끝낸다. `IMAGE_KEY: MISSING`이면 키 없음 모드, `PEXELS_KEY: MISSING`이면 스톡 슬롯 보류 모드, `session`이 OK가 아니면 세션 없음 모드로 계속한다. `blogId`·`photos:`·`min_images:`를 기억한다.
-2. Step 3을 수행한다. `P/images/image-plan.md`가 이미 있으면 새로 쓰지 않고 그 계획을 이어 쓴다: 키가 있으면 `파일`이 `보류`인 ai 슬롯만 `uv run --with google-genai --with pillow scripts/gen_image.py work/posts/<NNN-slug>/images/image-plan.md --only <보류 슬롯 번호(쉼표)>`로 생성하고(과금 — Gemini 1장 약 $0.04 추정 / OpenAI는 요금 페이지 확인) Step 3의 검수(스킬 7단계 기준·한도)·제공자 확인을 따른다. `파일`이 `보류`인 stock 슬롯은 `PEXELS_KEY: OK`일 때 `python3 scripts/fetch_stock.py work/posts/<NNN-slug> --only <보류 stock 슬롯 번호(쉼표)>`로 받는다(Step 3의 `stock` 슬롯 항목대로 — 검수·exit 표 동일, `검색 결과 없음` 보류는 게이트 3 `다른 사진으로(검색어 수정)`). 실사진을 준비했으면 게이트 3에서 그 슬롯을 `실사진으로 교체`로 고르게 한다.
+1. Step 0의 preflight Bash를 그대로 실행하고 Step 0 표대로 판정한다: `work-folder`·`script`·`skill`·`design-system.md`·`blogId`·`profile`·`intro-image`·`font`·`uv`가 MISSING/OUTDATED(`blogId`는 MISMATCH, `profile`은 `OK`가 아닌 모든 출력 — NOFILE 포함)이면 그 표의 안내 후 끝낸다(`intro-image`는 `MISSING`일 때만 — `N/A`는 통과). `IMAGE_KEY: CONFLICT`면 Step 0 표대로 `.env` 수정 안내 후 끝낸다. `IMAGE_KEY: MISSING`이면 키 없음 모드, `STOCK: MISSING`·`CONFLICT`이면 스톡 슬롯 보류 모드, `session`이 OK가 아니면 세션 없음 모드로 계속한다. `blogId`·`photos:`·`min_images:`를 기억한다.
+2. Step 3을 수행한다. `P/images/image-plan.md`가 이미 있으면 새로 쓰지 않고 그 계획을 이어 쓴다: 키가 있으면 `파일`이 `보류`인 ai 슬롯만 `uv run --with google-genai --with pillow scripts/gen_image.py work/posts/<NNN-slug>/images/image-plan.md --only <보류 슬롯 번호(쉼표)>`로 생성하고(과금 — Gemini 1장 약 $0.04 추정 / OpenAI는 요금 페이지 확인) Step 3의 검수(스킬 7단계 기준·한도)·제공자 확인을 따른다. `파일`이 `보류`인 stock 슬롯은 `STOCK: OK (…)`일 때 `python3 scripts/fetch_stock.py work/posts/<NNN-slug> --only <보류 stock 슬롯 번호(쉼표)>`로 받는다(Step 3의 `stock` 슬롯 항목대로 — 검수·exit 표 동일, `검색 결과 없음` 보류는 게이트 3 `다른 사진으로(검색어 수정)`). 실사진을 준비했으면 게이트 3에서 그 슬롯을 `실사진으로 교체`로 고르게 한다.
    **표지(00) 보류 처리**: `00` 행이 없으면(이전 버전 계획) 스킬 5단계대로 맨 윗줄에 추가한다. `P/images/00-cover.png`가 없으면(키 없음 `표지 보류`) — 키가 있으면 `--only` 목록에 `00`을 넣어 배경 `00-bg.png`를 만든 뒤 `make_cover.py`로 합성하고, 키가 없으면 `photos/` 실사진 배경으로 `make_cover.py`만 돌린다(Step 3 표지 명령). 이미 있더라도 `00` 행 `제목:`이 지금 frontmatter `title`과 다르면 `make_cover.py`만 다시 돌린다. 게이트 3의 첫 슬롯은 표지다.
 3. 게이트 3 → 확정 이미지 수 확인(여전히 부족하거나 표지가 없으면 다시 멈추고 같은 `resume` 안내) → Step 4(`build_final.py` → `lint --stage upload`) → Step 5 → 종료 보고. Step 4·5에서 B' 재개가 필요해지면(빌더 텍스트 사유, upload lint 텍스트 FAIL, exit 10·11) 디스패치하지 않고 실패 항목을 보고한 뒤 "`/naver-blog-autopilot:blog-run`(전체 워크플로우)으로 고친 뒤 다시 `resume`"이라고 안내하고 끝낸다.
 
 ### 업로드 재개 (Step 5만 — 세션이 없어 업로드를 미뤘을 때)
 
-1. Step 0의 preflight Bash를 그대로 실행하고 Step 0 표대로 판정한다: `work-folder: MISSING`·`script: MISSING`/`OUTDATED`·`skill: MISSING`·`blogId: MISSING`/`MISMATCH`·`profile:`이 `OK`가 아닌 모든 출력이면 그 표의 안내 후 끝낸다. `blogId`를 기억한다. `session: OK`가 아니면(`WRONG_ACCOUNT` 포함) 로그인 안내 후 끝낸다(`IMAGE_KEY`·`PEXELS_KEY`·`design-system.md`·`intro-image`·`font`·`uv`는 업로드만 할 때는 무관 — 무시. final.md는 이미 만들어져 있다. 단 위의 보류 이미지 질문에는 `IMAGE_KEY`·`PEXELS_KEY` 결과를 쓴다).
+1. Step 0의 preflight Bash를 그대로 실행하고 Step 0 표대로 판정한다: `work-folder: MISSING`·`script: MISSING`/`OUTDATED`·`skill: MISSING`·`blogId: MISSING`/`MISMATCH`·`profile:`이 `OK`가 아닌 모든 출력이면 그 표의 안내 후 끝낸다. `blogId`를 기억한다. `session: OK`가 아니면(`WRONG_ACCOUNT` 포함) 로그인 안내 후 끝낸다(`IMAGE_KEY`·`STOCK`·`design-system.md`·`intro-image`·`font`·`uv`는 업로드만 할 때는 무관 — 무시. final.md는 이미 만들어져 있다. 단 위의 보류 이미지 질문에는 `IMAGE_KEY`·`STOCK` 결과를 쓴다).
 2. `gates.md`에 `## 업로드`가 이미 있으면 "이미 임시저장했습니다(<일시>)"라고 알리고, 다시 올릴지 AskUserQuestion `다시 올리기` / `그만두기`(중복 임시저장 주의).
 3. `python3 scripts/lint_post.py <P>/final.md --stage upload --json --own-posts work/own-posts.json > <P>/lint.json` — exit 2(설정 누락 — 비어 있는 `business-profile.md` 행·`.env`의 `NAVER_BLOG_ID`)면 stderr 메시지를 그대로 보여 주고 채우라고 안내한 뒤 끝낸다. exit 1이면 FAIL id를 보고하고 끝낸다(텍스트 수정이 필요하면 이 명령이 아니라 전체 워크플로우로. 출처·캡션이 남아 있고 마무리 블록·소제목 여백·표지가 없는 이전 형식 final.md는 `sources_stripped`·`captions_empty`·`closing_block`·`h2_spacing`·`cover_file`에서 FAIL한다 — 이때는 "이전 형식 final.md입니다 — `resume`으로는 올릴 수 없습니다"라고 알린다).
 4. Step 5의 dry-run → 실제 임시저장(`--blog-id <blogId>`) → exit code 표대로 대응 → 성공 기록(`## 업로드` + variation-log 1줄) → 종료 보고.

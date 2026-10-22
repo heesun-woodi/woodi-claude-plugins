@@ -3,7 +3,7 @@
 
 사용 (작업 폴더에서, 표준 라이브러리만):
     python3 scripts/check_image_key.py [--env PATH] [--provider gemini|openai]
-    python3 scripts/check_image_key.py --stock [--env PATH]     # 스톡 사진(Pexels) 키만 확인
+    python3 scripts/check_image_key.py --stock [--env PATH]     # 스톡 사진 제공자(Openverse 기본 / Pexels) 확인
 
 - 키 탐색·제공자 결정은 gen_image.py와 같다(find_env·resolve_provider 공유). --env → cwd/.env → 환경변수.
 - 확인 방법: 모델 정보 조회(GET). gemini는 x-goog-api-key 헤더, openai는 Authorization: Bearer 헤더.
@@ -18,12 +18,16 @@
     4  모델 없음 또는 이 키로 접근 권한 없음(404)
     5  네트워크·기타 오류
 
---stock (Pexels만 확인 — 이미지 생성 키는 보지 않음, --provider·--model과 함께 쓸 수 없음):
-    키 탐색 --env → cwd/.env → 환경변수. GET https://api.pexels.com/v1/search?query=test&per_page=1 (헤더 Authorization: <키>)
+--stock (스톡 제공자만 확인 — 이미지 생성 키는 보지 않음, --provider·--model과 함께 쓸 수 없음):
+    제공자 결정: .env의 STOCK_PROVIDER → 없고 PEXELS_API_KEY가 있으면 pexels → 둘 다 없으면 openverse (fetch_stock.resolve_stock_provider).
+    openverse: GET https://api.openverse.org/v1/images/?q=desk&license=cc0,pdm&aspect_ratio=wide&mature=false&page_size=1 (키 없음)
+    0  스톡 확인: openverse 사용 가능 (키 불필요)
+    5  네트워크·5xx·기타 오류(429 포함 — `요청 한도 — 잠시 뒤 다시`)
+    pexels: GET https://api.pexels.com/v1/search?query=test&per_page=1 (헤더 Authorization: <키>)
     0  스톡 키 확인: pexels 사용 가능 (<source>)
-    2  스톡 키 없음 — .env에 PEXELS_API_KEY=…
     3  키 거부(401/403)
     5  네트워크·기타 오류(429 포함)
+    2  STOCK_PROVIDER 값 오류, 또는 pexels인데 PEXELS_API_KEY가 없음
 """
 import argparse
 import os
@@ -79,12 +83,36 @@ def check(provider, key, model):
         return 5, [f"확인 실패: {type(e).__name__} — {gen_image.redact(e, key)}"]
 
 
+def check_openverse():
+    """--stock, openverse: 검색 1회(q=desk, page_size=1)로 확인. (종료 코드, 사람용 문구 줄들)."""
+    import fetch_stock  # 같은 폴더 — 요청 URL·User-Agent 공유
+    url = fetch_stock.OPENVERSE_URL + "?q=desk" + fetch_stock.OPENVERSE_QUERY.replace("page_size=20", "page_size=1")
+    req = urllib.request.Request(url, headers={"User-Agent": fetch_stock.openverse_ua(), "Accept": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=TIMEOUT_SECONDS) as resp:
+            resp.read()
+        return 0, ["스톡 확인: openverse 사용 가능 (키 불필요)"]
+    except urllib.error.HTTPError as e:
+        status = getattr(e, "code", None)
+        return 5, [f"확인 실패: openverse HTTP {status}" + (" — 요청 한도 — 잠시 뒤 다시" if status == 429 else "")]
+    except urllib.error.URLError as e:
+        return 5, [f"확인 실패: 네트워크 오류 — {gen_image.redact(getattr(e, 'reason', e))}"]
+    except Exception as e:  # noqa: BLE001 — 타임아웃 등
+        return 5, [f"확인 실패: {type(e).__name__} — {gen_image.redact(e)}"]
+
+
 def check_stock(env_override):
-    """--stock: PEXELS_API_KEY만 확인. (종료 코드, 사람용 문구 줄들, 키). 키 값은 문구에 넣지 않는다."""
-    import fetch_stock  # 같은 폴더 — 키 탐색(find_pexels_key)·안내 문구 공유
-    key, source = fetch_stock.find_pexels_key(None, env_override)
-    if not key:
-        return 2, [fetch_stock.NO_KEY_MSG, fetch_stock.KEY_HELP], None
+    """--stock: 제공자를 결정해 확인. (종료 코드, 사람용 문구 줄들, 키). 키 값은 문구에 넣지 않는다."""
+    import fetch_stock  # 같은 폴더 — 제공자 결정·키 탐색·안내 문구 공유
+    try:
+        provider, key, source = fetch_stock.resolve_stock_provider(fetch_stock.find_stock_env(None, env_override))
+    except fetch_stock.ConfigError as e:
+        if e.kind == "invalid":
+            return 2, [f"스톡 설정 오류: {e}"], None
+        return 2, [fetch_stock.NO_PEXELS_KEY_MSG], None
+    if provider == "openverse":
+        code, lines = check_openverse()
+        return code, lines, None
     req = urllib.request.Request(PEXELS_CHECK_URL, headers={"Authorization": key, "User-Agent": fetch_stock.UA})
     try:
         with urllib.request.urlopen(req, timeout=TIMEOUT_SECONDS) as resp:
@@ -108,7 +136,7 @@ def main(argv=None):
     ap.add_argument("--provider", choices=gen_image.PROVIDERS, help="확인할 제공자(기본: IMAGE_PROVIDER → 있는 키 순)")
     ap.add_argument("--model", help="확인할 모델(기본: IMAGE_MODEL → 제공자 기본 모델)")
     ap.add_argument("--stock", action="store_true",
-                    help="스톡 사진(Pexels) 키 PEXELS_API_KEY만 확인(0=OK, 2=키 없음, 3=거부, 5=네트워크)")
+                    help="스톡 사진 제공자 확인 — 기본 openverse(키 불필요), STOCK_PROVIDER=pexels면 PEXELS_API_KEY(0=OK, 2=설정 오류, 3=키 거부, 5=네트워크)")
     try:
         a = ap.parse_args(argv)
     except SystemExit as e:
