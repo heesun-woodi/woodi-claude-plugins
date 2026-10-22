@@ -41,6 +41,8 @@
 
 ## 설치
 
+처음 설치하는 분은 단계별 [설치·사용 가이드](../../docs/guides/naver-blog-autopilot-guide.md)([PDF](../../docs/guides/naver-blog-autopilot-guide.pdf))를 따라가면 됩니다. 아래는 요약입니다.
+
 Claude Code 입력창에서 차례로 실행합니다.
 
 ```

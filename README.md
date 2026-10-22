@@ -32,7 +32,7 @@ Claude Code에서:
 | 플러그인 | 하는 일 |
 |---|---|
 | `ecommerce-growth-discovery` | GA4·Meta 광고 MCP로 자기 몰의 baseline·전환율·채널 효율을 탐색하고, 상품·랜딩 화면 문제를 정리해 PSR 가설과 ICE까지 만들기 (이커머스판 시작점) |
-| `naver-blog-autopilot` | 네이버 정보성 블로그 글을 주제 리서치 → 초안 → 공신 출처 팩트체크 → SEO → 이미지·표지 → 임시저장까지 자동화. 설치 후 `/naver-blog-autopilot:blog-onboard`가 대화로 블로그에 맞춰 줍니다 — 업체·전문가·개인 블로거·브랜드, 이미지는 AI 생성(Gemini/OpenAI)·무료 스톡(Pexels)·실사진 중 선택. 발행은 사람이 직접 합니다. 처음 쓰는 분은 [퀵스타트](docs/guides/naver-blog-autopilot-quickstart.md)부터 보세요 |
+| `naver-blog-autopilot` | 네이버 정보성 블로그 글을 주제 리서치 → 초안 → 공신 출처 팩트체크 → SEO → 이미지·표지 → 임시저장까지 자동화. 설치 후 `/naver-blog-autopilot:blog-onboard`가 대화로 블로그에 맞춰 줍니다 — 업체·전문가·개인 블로거·브랜드, 이미지는 AI 생성(Gemini/OpenAI)·무료 스톡(Pexels)·실사진 중 선택. 발행은 사람이 직접 합니다. 처음 쓰는 분은 [설치·사용 가이드](docs/guides/naver-blog-autopilot-guide.md)([PDF](docs/guides/naver-blog-autopilot-guide.pdf))부터 보세요 |
 
 ## 필요한 것
 
