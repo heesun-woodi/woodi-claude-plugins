@@ -157,6 +157,11 @@ exit 코드·출력 문구 형식은 1.0.0과 호환한다(README 「문제 해�
 
 ---
 
+### 2-5 1.1.1 패치 (2026-10-22, 리허설 R1-2·디자인 시스템 메모)
+
+- `related_links`: frontmatter `related: none`(선택 키 — 값은 따옴표·대소문자·앞뒤 공백 무시, 그 밖의 값은 없음과 같다)이 있고 `[[` 0건이면 자기 글이 2편 이상이어도 **WARN**(기준 `related: none — 주제에 맞는 자기 글 2편 미만(writer 판단)`, detail `자기 글 N편, 관련글 n개`), pass 영향 없음. 우선순위: 링크 ≥2 → PASS / `[[` 0건이고 (자기 글 2편 미만 · own-posts 없음 · `related: none`) → WARN(기준 문구는 이 순서로 고름) / 그 밖 FAIL. `[[`가 남으면 표시가 있어도 FAIL. 자기 글 2편 이상인데 링크가 모자라고 표시가 없으면 FAIL detail이 `related: none`을 안내한다. 쓰는 쪽: blog-draft-writer B'-3(주제에 맞는 글 2편 미만 → 관련글 전부 삭제, 담당자가 고른 글은 유지 — 관련글이 2개 미만이면 B'-4 frontmatter `variation:` 다음 줄 `related: none`). `build_final.py`는 frontmatter를 그대로 옮기므로 upload 단계에서도 같은 판정이다. exit 코드 변화 없음.
+- 디자인 시스템 템플릿: `skills/blog-design-system/references/design-system-template.md` 삭제. 정본 템플릿 = `scaffold/knowledge/design-system.md`(치환 변수 `[…]`), 채우기 안내 = `skills/blog-design-system/references/fill-guide.md`. 계약 테스트 `tests/test_design_system_skill.py`가 치환 변수 ↔ 안내 대응, lint 블록 = `DEFAULTS`, `소제목당 본문 N~M자` 문구(blog-draft-writer 자체 점검이 읽음)를 지킨다.
+
 ## 3. 온보딩 플로우 (`skills/blog-onboarding/SKILL.md`)
 
 plan 3-3 표 O0~O13과 같다(여기 재수록하지 않음 — 1.1.0 작업 plan §3-3(비공개 — 온보딩 스킬 본문이 정본)). 보충 규칙:

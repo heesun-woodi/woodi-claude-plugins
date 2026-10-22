@@ -864,6 +864,47 @@ class LintProfileV11Test(unittest.TestCase):
         self.assertEqual(self.by_id(self.run_lint(self.good))["related_links"]["result"], "PASS")
         self.assertEqual(self.failed(self.run_lint(self.no_links() + "\n[[관련글]]\n")), ["related_links"])  # 남은 자리표시는 오류
 
+    def with_related_none(self, text, value="none"):
+        return text.replace("variation: {", f"related: {value}\nvariation: {{", 1)
+
+    def test_related_none_warns_even_with_enough_own_posts(self):
+        self.set_own_posts(6)  # 리허설: 자기 글 6편이 모두 다른 주제 — writer가 관련글을 생략
+        res = self.run_lint(self.with_related_none(self.no_links()))
+        rl = self.by_id(res)["related_links"]
+        self.assertEqual((rl["result"], rl["rule"]), ("WARN", "related: none — 주제에 맞는 자기 글 2편 미만(writer 판단)"))
+        self.assertEqual(rl["detail"], "자기 글 6편, 관련글 0개")
+        self.assertEqual((self.failed(res), res["pass"]), ([], True))
+        for quoted in ('"none"', "None", " NONE "):  # 따옴표·대소문자·공백은 같은 표시로 본다
+            self.assertEqual(self.by_id(self.run_lint(self.with_related_none(self.no_links(), quoted)))
+                             ["related_links"]["result"], "WARN")
+
+    def test_related_none_does_not_excuse_placeholder_or_other_values(self):
+        self.set_own_posts(6)
+        text = self.with_related_none(self.no_links()) + "\n[[관련글: 남은 자리]]\n"
+        self.assertEqual(self.failed(self.run_lint(text)), ["related_links"])  # 남은 [[ 는 표시가 있어도 FAIL
+        for other in ("없음", "yes", "[]"):
+            self.assertEqual(self.failed(self.run_lint(self.with_related_none(self.no_links(), other))), ["related_links"])
+
+    def test_related_fail_detail_points_to_related_none(self):
+        self.set_own_posts(3)
+        rl = self.by_id(self.run_lint(self.no_links()))["related_links"]
+        self.assertEqual(rl["result"], "FAIL")
+        self.assertIn("related: none", rl["detail"])
+
+    def test_related_none_with_links_still_passes(self):
+        self.set_own_posts(6)  # 링크 2개가 있으면 표시와 무관하게 PASS
+        self.assertEqual(self.by_id(self.run_lint(self.with_related_none(self.good)))["related_links"]["result"], "PASS")
+
+    def test_related_none_kept_through_upload_stage(self):
+        self.set_own_posts(6)
+        t = self.upload_text()
+        for i in (1, 2):
+            t = t.replace(f"[관련글{i}](https://blog.naver.com/example_blog/{i})\n", "")
+        self.assertNotIn("blog.naver.com", t)
+        res = self.run_upload(self.with_related_none(t))
+        self.assertEqual(self.by_id(res)["related_links"]["result"], "WARN")
+        self.assertNotIn("related_links", self.failed(res))
+
     def test_own_posts_option_overrides_default_path(self):
         custom = self.write(os.path.join("elsewhere", "posts.json"), json.dumps([{"title": "하나"}]))
         p = self.write("nl.md", self.no_links())

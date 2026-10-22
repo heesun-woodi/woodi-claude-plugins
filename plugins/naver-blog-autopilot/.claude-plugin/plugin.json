@@ -1,7 +1,7 @@
 {
   "name": "naver-blog-autopilot",
   "description": "네이버 블로그의 정보성 글 작성을 자동화하는 플러그인입니다. 설치 후 /naver-blog-autopilot:blog-onboard가 블로그 유형(업체·전문가·개인·브랜드)·톤·마무리 블록·레퍼런스·공신 출처·이미지 소스를 대화로 채워 줍니다. 주제 리서치(참고 블로그 RSS·연관 검색어·공지 링크) → 디자인 시스템(자기 글 기준 고정 골격·톤 선택(합니다체/해요체)·고객 지역이 있으면 제목 지역 로테이션) 초안 → 법령·공공기관 근거 검토 → 네이버 SEO 다듬기 → 이미지 생성·스톡 사진·대표이미지(표지) 합성 → 업로드본 빌드(출처·캡션 제거, 프로필에 맞춘 마무리 블록) → upload lint → create-draft-from-folder로 네이버 임시저장(표지를 대표이미지로 지정) 순으로 진행하며, 발행은 사람이 직접 합니다. 업종에 묶이지 않으며, 업체 정보·고객 지역·금칙어·공신 출처는 작업 폴더 knowledge/ 템플릿에 채워 씁니다. 스킬 9종·에이전트 2종·커맨드 4종을 번들합니다. 필요: uv(Pillow는 uv run --with pillow), Python 3.11+, Playwright Chromium, naver-blog-cli(외부 도구, 따로 설치), 이미지 소스 — AI 생성 키(Gemini 또는 OpenAI)·무료 스톡(Pexels)·실사진 중 선택, 한글 폰트(Pretendard·AppleSDGothicNeo·맑은 고딕), macOS 또는 Windows(Git for Windows), 마무리 블록에 소개 이미지를 넣을 때 photos/business-intro.png.",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "license": "CC-BY-NC-4.0",
   "author": {
     "name": "heesun-woodi"

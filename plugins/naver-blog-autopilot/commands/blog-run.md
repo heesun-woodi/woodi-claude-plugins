@@ -187,7 +187,7 @@ python3 scripts/fetch_posts.py --all <blogId> --out work/own-posts.json
 python3 -c "import sys; sys.path.insert(0, 'scripts'); import lint_post; n = lint_post.own_posts_count('work/own-posts.json'); print('자기 글:', '알 수 없음' if n is None else f'{n}편')"
 ```
 
-실패하면 중단·보고. `자기 글: N편`을 기억한다 — **2편 미만이면 관련글 링크를 쓰지 않는다**(writer가 `[[관련글]]` 자리를 두지 않고, lint `related_links`는 WARN뿐이다. 새 블로그는 정상이다). 위 `skill: OK` 줄의 절차 스킬 5개 **절대경로**를 기억해 둔다 — 아래 발주·재개 메시지의 `${CLAUDE_PLUGIN_ROOT}/…` 자리에는 이 절대경로를 넣는다(변수 문자열 그대로 넘기지 않는다).
+실패하면 중단·보고. `자기 글: N편`을 기억한다 — **2편 미만이면 관련글 링크를 쓰지 않는다**(writer가 `[[관련글]]` 자리를 두지 않고, lint `related_links`는 WARN뿐이다. 새 블로그는 정상이다). 2편 이상이어도 이번 주제에 맞는 글이 없으면 writer가 B'에서 관련글을 생략하고 draft-v2.md frontmatter에 `related: none`을 남긴다(lint `related_links` WARN — 엉뚱한 글을 관련글로 붙이지 않게). 위 `skill: OK` 줄의 절차 스킬 5개 **절대경로**를 기억해 둔다 — 아래 발주·재개 메시지의 `${CLAUDE_PLUGIN_ROOT}/…` 자리에는 이 절대경로를 넣는다(변수 문자열 그대로 넘기지 않는다).
 
 ## Step 1. 주제 리서치 (메인)
 
@@ -346,7 +346,7 @@ SendMessage → blog-writer-<NNN>
   SEO 스킬: ${CLAUDE_PLUGIN_ROOT}/skills/blog-naver-seo/SKILL.md
   추가 입력: knowledge/naver-seo-checklist.md, work/own-posts.json,
             knowledge/learned-preferences.md (있으면 — 범주 제목·톤·구조·분량·내용·SEO 규칙)
-  관련글: 자기 글 <N>편 (Step 0 값 — 2편 미만이면 [[관련글]] 줄을 지우고 링크를 걸지 않음)
+  관련글: 자기 글 <N>편 (Step 0 값 — 2편 미만이면 [[관련글]] 줄을 지우고 링크를 걸지 않음. 2편 이상이어도 주제에 맞는 글이 2편 미만이면 모두 지우고 frontmatter related: none)
   질문 답: <있으면 담당자 답 원문, 없으면 생략>
   출력: work/posts/<NNN-slug>/draft-v2.md, work/posts/<NNN-slug>/seo.md
   반환에 "학습 규칙 적용: L-…"(없으면 "없음") 한 줄
@@ -367,7 +367,7 @@ SendMessage → blog-writer-<NNN>
   SEO 스킬: ${CLAUDE_PLUGIN_ROOT}/skills/blog-naver-seo/SKILL.md
   추가 입력: knowledge/naver-seo-checklist.md, work/own-posts.json,
             knowledge/learned-preferences.md (있으면)
-  관련글: 자기 글 <N>편 (Step 0 값 — 2편 미만이면 [[관련글]] 줄을 지우고 링크를 걸지 않음)
+  관련글: 자기 글 <N>편 (Step 0 값 — 2편 미만이면 [[관련글]] 줄을 지우고 링크를 걸지 않음. 2편 이상이어도 주제에 맞는 글이 2편 미만이면 모두 지우고 frontmatter related: none)
   질문 답: <있으면>
   출력: work/posts/<NNN-slug>/draft-v2.md, work/posts/<NNN-slug>/seo.md
   반환에 "학습 규칙 적용: L-…"(없으면 "없음") 한 줄
@@ -405,7 +405,7 @@ cp work/posts/<NNN-slug>/draft-v2.md work/posts/<NNN-slug>/draft-v2.shown.md
 
 안내 문구에 한 줄을 넣는다: "draft-v2.md를 메모장(macOS는 텍스트 편집기)으로 직접 고쳐 저장한 뒤 답해도 됩니다 — 고친 부분도 다음 글에 반영하도록 배웁니다: <draft-v2.md 절대경로>"(`os: windows`면 `C:\…` 경로도 함께).
 
-담당자에게 보여 준다: `P/draft-v2.md` 절대경로(`os: windows`면 `C:\…` 형식도)와 본문 전체, 제목 A안(frontmatter `title`)·B안(`<!-- 제목 B안: … -->`)과 — 프로필 `고객 지역`이 있을 때 — **제목 지역**(`gates.md ## 선택`의 `제목 지역:` = frontmatter `variation.title_region`; 고객 지역이 없으면 `-`라 보여 주지 않는다), factcheck 요약 줄과 `## 시점 표기 권고`, lint.json의 `pass`·chars·h2_count·images·sources·tone(프로필 `톤`이 해요체면 WARN일 수 있다 — 합니다체 종결 문장 수와 detail 예를 보여 주기만 한다)·title_region(고객 지역이 있을 때만. `learned_avoid`가 WARN이면 걸린 표현과 detail도 — "앞으로 피하기로 한 표현이 남아 있습니다" 한 줄, 수정 요청 여부는 담당자가 정함), `seo.md`의 표(요약), writer가 보고한 "사실 문장 변경"과 "학습 규칙 적용".
+담당자에게 보여 준다: `P/draft-v2.md` 절대경로(`os: windows`면 `C:\…` 형식도)와 본문 전체, 제목 A안(frontmatter `title`)·B안(`<!-- 제목 B안: … -->`)과 — 프로필 `고객 지역`이 있을 때 — **제목 지역**(`gates.md ## 선택`의 `제목 지역:` = frontmatter `variation.title_region`; 고객 지역이 없으면 `-`라 보여 주지 않는다), factcheck 요약 줄과 `## 시점 표기 권고`, 관련글(writer 반환의 `관련글:` 줄 — `related: none`이면 "관련글 없음 — 주제에 맞는 자기 글이 없어 생략했습니다. 걸고 싶은 글이 있으면 수정 요청에 주소를 적어 주세요(1개만 적어도 됩니다)" 한 줄), lint.json의 `pass`·chars·h2_count·images·sources·tone(프로필 `톤`이 해요체면 WARN일 수 있다 — 합니다체 종결 문장 수와 detail 예를 보여 주기만 한다)·title_region(고객 지역이 있을 때만. `learned_avoid`가 WARN이면 걸린 표현과 detail도 — "앞으로 피하기로 한 표현이 남아 있습니다" 한 줄, 수정 요청 여부는 담당자가 정함), `seo.md`의 표(요약), writer가 보고한 "사실 문장 변경"과 "학습 규칙 적용".
 
 **AskUserQuestion**:
 1. 제목 — `A안: <제목>` / `B안: <제목>`(기타 입력으로 직접 쓴 제목도 받는다. 핵심 키워드와, 프로필 `고객 지역`이 있으면 제목 지역 `<지역>`이 그대로 들어 있어야 한다고 함께 안내).
@@ -644,7 +644,7 @@ python3 scripts/lint_post.py work/posts/<NNN-slug>/final.md --stage upload --jso
 
 - **Step 4 → Step 3 되돌아가기는 글 1편당 1회**(위 빌더 사유의 슬롯 쪽과 아래 lint FAIL의 이미지 쪽 합산). 두 번째로 필요해지면 멈추고 보고한다.
 - lint exit 0 → Step 5. exit 2 → 사용 오류 또는 설정 누락 — Step 2와 같이(설정 누락은 안내 후 중단, 그 밖은 중단·보고).
-- lint exit 1 → FAIL id별로 처리한다(lint.json의 `checks[].result == "FAIL"`). upload 단계에서 `sources`·`seo_image_captions`는 **SKIP**이다(업로드본은 출처·캡션을 지우므로 — 대신 `sources_stripped`·`captions_empty`가 본다). `learned_avoid`는 WARN뿐이라 처리하지 않는다(게이트 2에서 이미 보여 줌). `related_links`는 자기 글이 2편 미만이면 **WARN(통과)**이고, `tone`도 해요체 프로필이면 WARN뿐이다 — 둘 다 처리하지 않으며, `related_links` WARN은 종료 보고에 "자기 글 2편 미만 — 관련글 링크 생략" 한 줄만 넣는다.
+- lint exit 1 → FAIL id별로 처리한다(lint.json의 `checks[].result == "FAIL"`). upload 단계에서 `sources`·`seo_image_captions`는 **SKIP**이다(업로드본은 출처·캡션을 지우므로 — 대신 `sources_stripped`·`captions_empty`가 본다). `learned_avoid`는 WARN뿐이라 처리하지 않는다(게이트 2에서 이미 보여 줌). `related_links`는 자기 글이 2편 미만이거나 final.md frontmatter에 `related: none`(writer가 주제에 맞는 자기 글이 없다고 판단)이 있으면 **WARN(통과)**이고, `tone`도 해요체 프로필이면 WARN뿐이다 — 둘 다 처리하지 않으며, `related_links` WARN은 종료 보고에 한 줄만 넣는다(rule이 `자기 글 2편 미만…`이면 "자기 글 2편 미만 — 관련글 링크 생략", `related: none…`이면 "주제에 맞는 자기 글이 2편 미만 — 관련글 <n>개"(n = lint detail의 관련글 수, 0이면 "관련글 생략")). `related_links` **FAIL**(자기 글 2편 이상인데 링크 2개 미만이고 `related: none`도 없음, 또는 `[[` 남음)은 아래 텍스트 갈래다 — B' 재개 메시지에 "관련글이 2개 미만이면 `related: none`을 남길 것(담당자가 고른 글은 지우지 말 것 — 주제에 맞는 글이 없어 생략한 경우만 모두 지움)"을 함께 적는다.
 
 | 갈래 | FAIL id | 처리 |
 |---|---|---|
@@ -742,7 +742,7 @@ PEND=$(python3 scripts/feedback_log.py pending | python3 -c "import json,sys;pri
 ## ● 종료 보고
 
 담당자에게 보고한다:
-- 임시저장 제목 · 카테고리 · 태그 · 이미지 수(스크립트 출력값) · 장소(`장소카드`가 있을 때 — 출력의 `장소:` 값) · lint `related_links`가 WARN이었으면 "자기 글 2편 미만 — 관련글 링크 생략" 한 줄
+- 임시저장 제목 · 카테고리 · 태그 · 이미지 수(스크립트 출력값) · 장소(`장소카드`가 있을 때 — 출력의 `장소:` 값) · lint `related_links`가 WARN이었으면 그 사유 한 줄("자기 글 2편 미만 — 관련글 링크 생략" 또는 "주제에 맞는 자기 글이 2편 미만 — 관련글 <n>개(related: none)")
 - "대표이미지는 표지(00-cover) — 미리보기에서 첫 사진에 '대표' 표시가 있는지 확인해 주세요." (`경고: 대표이미지 지정 실패`가 있었으면 대신: "대표이미지 지정에 실패했습니다. 임시저장 글에서 첫 사진(표지)을 대표로 직접 지정해 주세요.")
 - 스크립트 출력에 `경고: 카테고리/태그 설정 실패`가 있었으면 반드시: "임시저장은 됐지만 카테고리·태그가 빠졌을 수 있습니다. 임시저장 글에서 직접 확인해 주세요."
 - `경고: 장소 카드 확인 필요`가 있었으면 위 "성공 출력 읽기"의 안내.

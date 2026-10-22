@@ -135,7 +135,7 @@ allowed-tools: Read, Write, Edit, Glob, Bash(python3 scripts/check_profile.py:*)
   - **글 0편**(exit≠0, 빈 목록, O3 `나중에`) 또는 `기준 글 없이` → 질문 없이 「레퍼런스 0 없음」 경로를 안내한다:
     "자기 블로그에 아직 가져올 글이 없어 「레퍼런스 0 없음」 경로로 진행합니다. 디자인 시스템은 템플릿·lint 기본값·외부 레퍼런스로 만들고 「측정 전」으로 표시합니다. 관련글 링크 검사는 자기 글이 2편이 될 때까지 경고(WARN)만 냅니다. 글이 쌓이면 `/naver-blog-autopilot:blog-onboard`를 다시 실행해 「레퍼런스·디자인 시스템」만 고르세요."
     O5의 `내 글 기준` 옵션은 보이지 않는다.
-- **쓰는 파일·행**: `work/own-posts.json`·`work/design-system/own-<logNo>.json`(즉시) · (O11) `source-blogs.json` `own_blog.categories.info`, `design_references[0]` = `{"blogId": <blogId>, "logNo": <logNo>, "url": "m.blog.naver.com/<blogId>/<logNo>", "role": "own-style", "why": "<O7a 규칙의 측정 요약 — 이 글의 구조·모습을 따른다>"}`. 0편이면 `own-style` 항목을 만들지 않는다.
+- **쓰는 파일·행**: `work/own-posts.json`·`work/design-system/own-<logNo>.json`(즉시) · (O11) `source-blogs.json` `own_blog.categories.info`, `design_references[0]` = `{"blogId": <blogId>, "logNo": <logNo>, "url": "m.blog.naver.com/<blogId>/<logNo>", "role": "own-style", "why": "구조·모습 전체(기준 글)"}`(레퍼런스 0은 디자인 시스템이 고정 7조각으로 쪼개므로 자동 why 구절을 쓰지 않는다). 0편이면 `own-style` 항목을 만들지 않는다.
 
 ## O5 톤 — Q4
 
@@ -185,7 +185,7 @@ allowed-tools: Read, Write, Edit, Glob, Bash(python3 scripts/check_profile.py:*)
 - **분기**:
   - Q6 `OK인 것 전부 쓰기` → 응답 OK 항목 전부(5개 초과면 앞 5개). `번호로 고르기` → 기타의 번호(응답 OK인 것만, 6개 이상이면 앞 5개). `레퍼런스 없이 진행` → 측정하지 않는다.
   - 측정 exit가 0이 아닌 항목은 표에서 「측정 실패」로 보이고 레퍼런스에서 뺀다.
-  - **why 자동 기입**: 기타에 「번호: 이유」가 있으면 그 문장, 없으면 측정 요약 → `소제목 <headings>개·이미지 <images>장·FAQ 있음/없음`(`headings`가 0이고 `bold_lines`가 있으면 `굵은 소제목 <bold_lines>줄`). 결과를 question-bank O7a 측정 표로 보여 준다(질문 아님 — O11 저장 확인에서 고칠 수 있음).
+  - **why 자동 기입**: 기타에 「번호: 이유」가 있으면 그 문장, 없으면 측정 요약에서 **특징 구절**을 만들어 `(자동) `으로 시작한다(숫자만 적지 않는다 — 레퍼런스는 URL이 아니라 이유이고, 디자인 시스템 4단계가 이 구절을 특징 조각으로 읽는다). 구절은 ` · `로 잇는다: 소제목 수 s(= `headings`, 0이면 `bold_lines`)가 1 이상이면 `소제목으로 나눠 읽기 쉬움(소제목 s개)`, `images`가 1 이상이면 `사진과 글 비율(이미지 <images>장 — 약 <chars÷images를 10단위 반올림>자당 1장)`, FAQ가 있으면 `FAQ로 마무리`. 셋 다 없으면 `(자동) 글 전체 구성`. 예: `(자동) 소제목으로 나눠 읽기 쉬움(소제목 6개) · 사진과 글 비율(이미지 8장 — 약 300자당 1장) · FAQ로 마무리`. 결과를 question-bank O7a 측정 표로 보여 준다(질문 아님 — O11 저장 확인에서 고칠 수 있음).
 - **쓰는 파일·행**: `work/design-system/ref-<n>-<blogId>.json`(즉시) · (O11) `source-blogs.json` `design_references[1..]` = `{"blogId", "logNo", "url": "m.blog.naver.com/<blogId>/<logNo>", "why"}`.
 
 ## O7b 주제 소스 확보 — 자유 입력 1회 (+ Q7은 O8과 함께)
@@ -264,7 +264,7 @@ allowed-tools: Read, Write, Edit, Glob, Bash(python3 scripts/check_profile.py:*)
 - **분기**: O0 `그대로`이거나, `항목만 고르기`에서 「레퍼런스·디자인 시스템」을 고르지 않았으면 건너뛴다(O13에 「건너뜀」).
 - **호출**: `Skill` 도구로 `naver-blog-autopilot:blog-design-system`을 부른다. args(호출 문맥)에 아래를 그대로 채워 넣는다:
   - 공통: "온보딩(O12)에서 호출합니다. 작업 폴더: <절대경로>. 톤: <합니다체|해요체>. 마무리 블록: <값>. 고객 지역: <있음|비움>. 측정 파일이 이미 있습니다 — `work/design-system/own-<logNo>.json`·`ref-<n>-<blogId>.json`(이번 레퍼런스: <파일 목록>; 목록에 없는 `ref-*` 파일은 지난 측정이라 쓰지 않습니다). 같은 글은 다시 받지 말고, `.md`가 없으면 JSON의 `markdown` 필드로 만드세요. 측정 실패: <목록 또는 없음>."
-  - **글 0편이면** 문맥에 이 문장을 포함한다: "자기 글이 0편입니다(`own-style` 레퍼런스 없음). 스킬의 「레퍼런스 0 없음」 경로로 만들어 주세요 — 2단계 자기 글 측정 생략, 5단계 lint 기본값, 7단계 조각은 외부 레퍼런스만, 수치는 「측정 전」 표기."
+  - **글 0편이거나 기준 글 없이 진행했으면**(`own-style` 레퍼런스 없음) 문맥에 이 문장을 포함한다: "기준 글이 없습니다(자기 글 <N>편 — `work/own-posts.json` 기준, `own-style` 레퍼런스 없음). 스킬의 「레퍼런스 0 없음」 경로로 만들어 주세요 — 2단계 자기 글 측정 생략, 5단계 lint 키는 기본값, 7단계 조각은 외부 레퍼런스만, 수치는 「측정 전」 표기. ⑥ 관련글 항목은 편수를 적지 않고 그대로 둡니다."
   - `knowledge/design-system.md`의 현재 상태(없음 / 있음 — 자리표시 `[` n개 / 있음 — 채워짐)도 한 줄로 넘긴다. 생성·갱신 모드 판정과 담당자 검토 요청(그 스킬 8단계)은 그 스킬이 한다 — 이 스킬의 질문 수에 넣지 않는다.
 - **쓰는 파일·행**: `knowledge/design-system.md`(생성 모드) 또는 `work/design-system/proposed.md`(갱신 모드) — 그 스킬이 쓴다.
 

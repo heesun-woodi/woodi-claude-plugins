@@ -9,7 +9,7 @@ description: Use when a finished blog post (posts/NNN-slug/final.md, gate 3 pass
 에디터 조작은 외부 CLI `naver-blog-cli`에만 위임하고(명령·출력 문구: `references/naver-blog-cli.md`), 이 스킬은 Playwright 코드를 쓰지 않는다.
 
 - 수행 주체: **메인 세션이 직접**. 서브에이전트에 맡기지 않는다 — 로그인 만료·2차 인증·CAPTCHA·브라우저 창 개입이 생길 수 있다.
-- 전제: cwd = 작업 폴더, 게이트 3(이미지 승인) 통과, `work/posts/NNN-slug/final.md` 존재(frontmatter `title/category/tags/variation`, 이미지 절대경로, 실제 관련글 URL, 출처·캡션 없음, 프로필 `마무리 블록` 행에 든 항목의 마무리 블록 포함)와 같은 폴더의 `images/00-cover.png`(표지).
+- 전제: cwd = 작업 폴더, 게이트 3(이미지 승인) 통과, `work/posts/NNN-slug/final.md` 존재(frontmatter `title/category/tags/variation`, 이미지 절대경로, 관련글이 있으면 실제 URL(없으면 frontmatter `related: none` 또는 자기 글 2편 미만), 출처·캡션 없음, 프로필 `마무리 블록` 행에 든 항목의 마무리 블록 포함)와 같은 폴더의 `images/00-cover.png`(표지).
 - 이 스킬은 사용자에게 묻지 않는다. 종료 보고는 `/naver-blog-autopilot:blog-run`이 한다.
 
 ## 절차

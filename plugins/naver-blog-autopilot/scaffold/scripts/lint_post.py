@@ -27,6 +27,8 @@ U+3164를 빼고 센다. h2_count는 `## 📑 목차`·`## 📞`로 시작하는
 설정(기본값 없음 — 비어 있으면 오류 메시지와 exit 2): knowledge/business-profile.md `## 금칙어` 절(금칙어가 없으면 `- 없음` 한 줄)·`고객 지역` 행,
 final·upload 단계는 --blog-id(없으면 작업 폴더(knowledge/의 상위) .env의 NAVER_BLOG_ID — related_links가 그 블로그 글 링크를 센다).
 related_links는 --own-posts(기본 <knowledge>/../work/own-posts.json)의 글이 2편 미만이거나 파일이 없으면 WARN만.
+자기 글이 2편 이상이어도 frontmatter에 `related: none`(writer가 주제에 맞는 자기 글이 없다고 판단해 관련글을 생략함)이
+있으면 `[[` 0건일 때 FAIL 대신 WARN.
 """
 import argparse
 import json
@@ -50,6 +52,7 @@ TONES = {"합니다체": "formal", "해요체": "casual"}
 IMAGE_SOURCES = ("ai", "stock", "photo")
 TEMPLATE_VAR_RE = re.compile(r"\[[^\]]*\]")  # 템플릿의 `[치환 변수]`를 채우지 않은 값(fullmatch로 판정)
 REQUIRED_KEYS = ["title", "keyword", "category", "tags", "variation"]
+RELATED_NONE = "related: none"  # 선택 frontmatter 줄 — 주제에 맞는 자기 글이 없어 관련글을 생략함(related_links WARN)
 
 IMG_RE = re.compile(r"!\[([^\]]*)\]\(([^)]*)\)")
 URL_RE = re.compile(r"https?://\S+")
@@ -376,6 +379,12 @@ def parse_frontmatter(lines):
     return fm, end + 1, None
 
 
+def related_none(fm):
+    """frontmatter `related: none`(writer가 주제에 맞는 자기 글이 없어 관련글을 생략했다는 표시)이면 True."""
+    v = (fm or {}).get("related")
+    return isinstance(v, str) and v.strip().lower() == "none"
+
+
 def has_value(v):
     return bool(v) if isinstance(v, (list, str)) else v is not None
 
@@ -388,7 +397,7 @@ def lint_text(text, stage, th, forbidden, regions=None, post_dir=None, learned_a
               tone_mode="formal", closing=None, own_posts=None):
     """regions: 고객 지역 목록(비면 title_region SKIP). post_dir: 글 폴더(upload의 cover_file 검사용).
     tone_mode: 'formal'(해요체 종결 FAIL) | 'casual'(합니다체 종결을 WARN으로만). closing: 검사할 마무리 블록 항목
-    (CLOSING_ORDER 부분집합, 기본 전부). own_posts: 자기 글 수(own_posts_count 결과) — 2 미만이면 related_links는 WARN만.
+    (CLOSING_ORDER 부분집합, 기본 전부). own_posts: 자기 글 수(own_posts_count 결과) — 2 미만이면 related_links는 WARN만(frontmatter `related: none`도 WARN만).
     learned_avoid: load_learned_avoid() 결과 [(표현, 규칙 id)] — None이면 learned_avoid 검사 SKIP.
     blog_id: 자기 블로그 ID — related_links가 https://blog.naver.com/<blog_id>/… 링크를 센다."""
     regions = list(regions or [])
@@ -559,16 +568,24 @@ def lint_text(text, stage, th, forbidden, regions=None, post_dir=None, learned_a
             c.append(check("tags_count", "형식 오류", "리스트", "FAIL", "리스트 형식 아님"))
         slots = prose.count("[[")
         few = own_posts is not None and own_posts < 2  # 링크할 자기 글이 2편 미만 — 링크 생략 허용(WARN만)
+        none_marked = related_none(fm)  # writer 판단: 주제에 맞는 자기 글 없음 — 링크 생략 허용(WARN만)
         if slots == 0 and own >= 2:
             rl = "PASS"
-        elif (few or own_posts is None) and slots == 0:
+        elif slots == 0 and (few or own_posts is None or none_marked):
             rl = "WARN"
         else:
             rl = "FAIL"
-        c.append(check("related_links", f"[[ {slots}건, 관련글 {own}개",
-                       ("자기 글 2편 미만 — 링크 생략 허용" if few else "own-posts.json 없음 — 글 목록 갱신 전") if rl == "WARN" else
-                       f"[[ 0건, {blog_id or '자기 블로그'} 링크 >=2", rl,
-                       f"자기 글 {own_posts}편" if few and rl == "WARN" else ""))
+        rule, detail = f"[[ 0건, {blog_id or '자기 블로그'} 링크 >=2", ""
+        if rl == "WARN" and few:
+            rule, detail = "자기 글 2편 미만 — 링크 생략 허용", f"자기 글 {own_posts}편"
+        elif rl == "WARN" and own_posts is None:
+            rule = "own-posts.json 없음 — 글 목록 갱신 전"
+        elif rl == "WARN":
+            rule, detail = f"{RELATED_NONE} — 주제에 맞는 자기 글 2편 미만(writer 판단)", f"자기 글 {own_posts}편, 관련글 {own}개"
+        elif slots == 0:  # 자기 글 2편 이상인데 링크가 모자람 — 고치는 길을 알려 준다
+            detail = (f"관련글 {own}개 — 주제에 맞는 자기 글이 2편 미만이면 관련글 링크를 모두 지우고 "
+                      f"frontmatter에 `{RELATED_NONE}`을 쓴다")
+        c.append(check("related_links", f"[[ {slots}건, 관련글 {own}개", rule, rl, detail))
         bad, notes = [], []
         for cap, path in all_images:
             p = _img_path(path)
@@ -698,7 +715,7 @@ def main(argv=None):
                     help="자기 블로그 ID(final·upload의 관련글 링크 기준). 없으면 작업 폴더 .env의 NAVER_BLOG_ID")
     ap.add_argument("--own-posts", metavar="PATH", dest="own_posts",
                     help="자기 블로그 글 목록 JSON(기본: <knowledge>/../work/own-posts.json). 글이 2편 미만이면 "
-                         "related_links는 WARN만(링크 생략 허용)")
+                         "related_links는 WARN만(링크 생략 허용). 2편 이상이어도 frontmatter `related: none`이면 WARN만")
     ap.add_argument("--json", action="store_true", help="사람용 표 대신 JSON만 출력")
     try:
         a = ap.parse_args(argv)

@@ -11,6 +11,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 SCRIPT = os.path.join(os.path.dirname(HERE), "build_final.py")
 sys.path.insert(0, os.path.dirname(HERE))
 import build_final  # noqa: E402
+import lint_post  # noqa: E402
 
 F = "ㅤ"
 TITLE = "가나동 선물 포장 순서와 준비물"
@@ -166,6 +167,16 @@ class BuildFinalTest(unittest.TestCase):
         ])
         self.assertTrue(text.endswith("**\n") and not text.endswith("\n\n"))
         self.assertNotIn("\n\n\n", text)
+
+    def test_related_none_survives_build(self):
+        # 1.1.1: writer가 관련글을 생략하며 남긴 frontmatter `related: none`이 final.md까지 가야 upload lint가 WARN을 낸다
+        self.draft = DRAFT.replace("title_region: 가나동}\n", "title_region: 가나동}\nrelated: none\n", 1)
+        self.assertIn("\nrelated: none\n", self.draft)
+        p, text = self.run_build()
+        self.assertEqual(p.returncode, 0, p.stderr)
+        fm, _, err = build_final.parse_frontmatter(text.split("\n"))
+        self.assertIsNone(err)
+        self.assertTrue(lint_post.related_none(fm))
 
     def test_place_required_without_profile_row(self):
         # 장소 검색어 행이 없으면 기본값 없이 변환 불가(조용한 기본값 금지)
